@@ -1,0 +1,15 @@
+.venv/
+.venv*/
+venv/
+__pycache__/
+*.pyc
+.env
+.streamlit/secrets.toml
+data/*.db
+data/*.db-shm
+data/*.db-wal
+.app_test_temp/
+.idea/
+.vscode/
+*.zip
+screenshots/

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "wuma-ai": {
+      "type": "stdio",
+      "command": "D:\\AI_Coding\\.venv\\Scripts\\python.exe",
+      "args": [
+        "D:\\AI_Coding\\wuma_ai_v1_3_15\\learnbuddy\\mcp_server.py"
+      ],
+      "env": {
+        "WUMA_AI_DB_PATH": "D:\\AI_Coding\\wuma_ai_v1_3_15\\data\\wuma_ai.db"
+      },
+      "description": "悟码AI教师诊断只读连接器",
+      "disabled": false
+    }
+  }
+}

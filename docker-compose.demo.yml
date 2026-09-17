@@ -1,0 +1,17 @@
+services:
+  wuma-ai-demo:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      PORT: "8501"
+      WUMA_DEMO_MODE: "true"
+      WUMA_DEMO_READ_ONLY: "true"
+      WUMA_AI_DB_PATH: "/app/data/wuma_ai_demo.db"
+      CODE_EXECUTION_ENABLED: "false"
+    volumes:
+      - wuma_demo_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  wuma_demo_data:

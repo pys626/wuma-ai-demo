@@ -1,0 +1,5 @@
+streamlit==1.52.0
+altair==6.0.0
+pandas>=2.0,<3.0
+openai>=1.60,<3.0
+python-dotenv>=1.0,<2.0
