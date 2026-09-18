@@ -17,6 +17,15 @@ import teacher_insights as insights  # noqa: E402
 PROTOCOL_VERSION = "2025-06-18"
 
 
+def configure_stdio_utf8():
+    """MCP uses JSON Lines; force UTF-8 on Windows to avoid GBK mojibake."""
+    for stream_name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8")
+
+
 def data_snapshot(records):
     ids = [int(item["id"]) for item in records if item.get("id") is not None]
     return {
@@ -36,6 +45,61 @@ def compact_code(record):
         "total": total,
         "score": score if maximum else None,
         "max_score": maximum if maximum else None,
+    }
+
+
+def scoped_teacher_queue(tasks, submission_id=None):
+    """Return an explicit queue contract instead of relying on an empty list."""
+    scoped = [
+        item for item in tasks
+        if submission_id is None or int(item.get("submission_id") or 0) == int(submission_id)
+    ]
+    task_types = list(dict.fromkeys(item.get("task_type") for item in scoped if item.get("task_type")))
+    return {
+        "状态": "有待办" if scoped else "空",
+        "待办数量": len(scoped),
+        "任务类型": task_types,
+        "结论": "存在尚未处理的教师任务" if scoped else "当前没有尚未处理的教师任务",
+    }
+
+
+def workflow_contract(record, review_state, mastery, feedbacks, tasks):
+    """Keep workflow state, review state and learning state semantically separate."""
+    queue = scoped_teacher_queue(tasks, record.get("id"))
+    pending_feedbacks = sum(item.get("status") == "待处理" for item in feedbacks)
+    review_status = review_state["状态"]
+    decision = record.get("teacher_decision")
+    if not decision:
+        if review_status == "已复核":
+            decision = "已完成复核（旧记录未单独保存文字结论）"
+        elif review_status == "待复核":
+            decision = "尚待教师复核"
+        else:
+            decision = "无需强制复核"
+    confirmed = record.get("teacher_confirmed_overall")
+    return {
+        "教师待办队列": queue,
+        "教师复核": {
+            "状态": review_status,
+            "是否当前待办": review_state["是否当前待办"],
+            "原因": review_state["原因"],
+            "结论": decision,
+            "确认理解度": (
+                confirmed
+                if confirmed is not None
+                else "未单独记录（不据此推断复核状态）"
+            ),
+        },
+        "学生学习": {
+            "状态": mastery.get("status", "证据不足"),
+            "说明": mastery.get("text", ""),
+            "是否等同教师待办": False,
+        },
+        "学生反馈": {
+            "状态": "有待处理反馈" if pending_feedbacks else "无待处理反馈",
+            "待处理数": pending_feedbacks,
+        },
+        "口径说明": "教师待办只以“教师待办队列”为准；“需要巩固”是学生学习状态，不表示教师尚未处理。",
     }
 
 
@@ -80,6 +144,14 @@ def overview(arguments):
             qa_records=newest_qa,
             mastery=newest_mastery,
         )
+        newest_feedbacks = db.list_student_feedbacks(submission_id=newest["id"])
+        newest_workflow = workflow_contract(
+            newest,
+            newest_review,
+            newest_mastery,
+            newest_feedbacks,
+            tasks,
+        )
         newest_summary = {
             "提交": newest["id"],
             "学生": {"学号": newest.get("student_id"), "姓名": newest.get("name")},
@@ -95,7 +167,8 @@ def overview(arguments):
             "教师复核状态": newest_review["状态"],
             "是否当前待办": newest_review["是否当前待办"],
             "教师复核原因": newest_review["原因"],
-            "教师结论": newest.get("teacher_decision"),
+            "教师结论": newest_workflow["教师复核"]["结论"],
+            "状态口径": newest_workflow,
             "重点关注": insights.ranked_concerns(
                 newest,
                 newest_preliminary,
@@ -111,6 +184,7 @@ def overview(arguments):
         "纳入掌握统计": len(latest),
         "平均答辩理解度": round(sum(scores) / len(scores)) if scores else None,
         "教师待办总数": len(tasks),
+        "教师待办队列": scoped_teacher_queue(tasks),
         "待教师复核": pending_review,
         "待处理反馈": pending_feedback,
         "当前评测异常": active_technical,
@@ -120,11 +194,17 @@ def overview(arguments):
 
 def pending_tasks(arguments):
     limit = max(1, min(int(arguments.get("limit", 20)), 50))
-    tasks = db.list_teacher_tasks(assignment_id=arguments.get("assignment_id"))[:limit]
-    return [{key: item.get(key) for key in (
+    all_tasks = db.list_teacher_tasks(assignment_id=arguments.get("assignment_id"))
+    tasks = all_tasks[:limit]
+    rows = [{key: item.get(key) for key in (
         "task_type", "title", "description", "priority", "status",
         "submission_id", "assignment_id", "action_label",
     )} for item in tasks]
+    return {
+        "教师待办队列": scoped_teacher_queue(all_tasks),
+        "任务列表": rows,
+        "口径说明": "仅列出当前尚未处理的教师任务；空队列时不得从历史记录中另选提交冒充待办。",
+    }
 
 
 def student_diagnosis(arguments):
@@ -144,6 +224,8 @@ def student_diagnosis(arguments):
         qa_records=qa,
         mastery=mastery,
     )
+    tasks = db.list_teacher_tasks()
+    workflow = workflow_contract(record, review_state, mastery, feedbacks, tasks)
     questions = []
     for index, item in enumerate(qa, 1):
         _, status, detail = insights.question_finding(item, index)
@@ -168,9 +250,13 @@ def student_diagnosis(arguments):
             "状态": review_state["状态"],
             "是否当前待办": review_state["是否当前待办"],
             "原因": review_state["原因"],
-            "结论": record.get("teacher_decision"),
-            "确认理解度": record.get("teacher_confirmed_overall"),
+            "结论": workflow["教师复核"]["结论"],
+            "确认理解度": workflow["教师复核"]["确认理解度"],
         },
+        "教师待办队列": workflow["教师待办队列"],
+        "学生学习状态": workflow["学生学习"],
+        "学生反馈状态": workflow["学生反馈"],
+        "状态口径说明": workflow["口径说明"],
         "指标口径": "代码全部通过不代表已掌握原理；答辩理解度和证据覆盖度不是课程成绩",
         "待处理反馈数": sum(item.get("status") == "待处理" for item in feedbacks),
         "隐私说明": "未输出学生代码、回答原文、隐藏测试输入输出或隐藏教学重点",
@@ -180,6 +266,7 @@ def student_diagnosis(arguments):
 def student_progress(arguments):
     student_id = str(arguments["student_id"]).strip()
     records = db.list_submissions(student_id=student_id)
+    tasks = db.list_teacher_tasks()
     items = []
     for record in records:
         report = db.get_report(record["id"])
@@ -192,6 +279,8 @@ def student_progress(arguments):
             qa_records=qa,
             mastery=mastery,
         )
+        feedbacks = db.list_student_feedbacks(submission_id=record["id"])
+        workflow = workflow_contract(record, review_state, mastery, feedbacks, tasks)
         items.append({
             "提交": record["id"],
             "实验": record.get("assignment_title") or record.get("problem"),
@@ -205,7 +294,10 @@ def student_progress(arguments):
             "掌握证据": mastery,
             "教师复核状态": review_state["状态"],
             "是否当前待办": review_state["是否当前待办"],
-            "教师结论": record.get("teacher_decision"),
+            "教师结论": workflow["教师复核"]["结论"],
+            "教师待办队列": workflow["教师待办队列"],
+            "学生学习状态": workflow["学生学习"],
+            "状态口径说明": workflow["口径说明"],
         })
     return {
         "数据快照": data_snapshot(records),
@@ -218,7 +310,7 @@ def student_progress(arguments):
 TOOLS = [
     {"name": "wuma_teacher_overview", "description": "查看悟码AI班级概况、教师待办数量和当前评测异常；可按实验筛选。",
      "inputSchema": {"type": "object", "properties": {"assignment_id": {"type": "integer", "description": "实验ID；省略表示全部实验"}}}},
-    {"name": "wuma_pending_teacher_tasks", "description": "列出悟码AI中待教师复核、待回复反馈和重答跟进任务。",
+    {"name": "wuma_pending_teacher_tasks", "description": "列出悟码AI当前尚未处理的教师任务；空队列表示没有教师待办，不得从历史记录替补。",
      "inputSchema": {"type": "object", "properties": {"assignment_id": {"type": "integer"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}}},
     {"name": "wuma_student_diagnosis", "description": "按提交编号读取精简、可核查的学生诊断，不返回学生代码、回答原文、隐藏测试和隐藏教学重点。",
      "inputSchema": {"type": "object", "properties": {"submission_id": {"type": "integer", "minimum": 1}}, "required": ["submission_id"]}},
@@ -245,7 +337,7 @@ def reply(message):
         return {"jsonrpc": "2.0", "id": request_id, "result": {
             "protocolVersion": selected_protocol,
             "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "wuma-ai-learnbuddy", "version": "1.3.15"},
+            "serverInfo": {"name": "wuma-ai-learnbuddy", "version": "1.3.16"},
         }}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}
@@ -266,6 +358,7 @@ def reply(message):
 
 
 def main():
+    configure_stdio_utf8()
     db_path = Path(os.getenv("WUMA_AI_DB_PATH", str(db.DB_PATH)))
     if not db_path.is_file():
         print(f"悟码AI数据库不存在：{db_path}", file=sys.stderr, flush=True)

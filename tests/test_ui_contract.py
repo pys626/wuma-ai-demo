@@ -13,7 +13,7 @@ class UIContractTests(unittest.TestCase):
         cls.source = app_path.read_text(encoding="utf-8")
 
     def test_version_marker_is_updated(self):
-        self.assertIn("v1.3.15 · 浏览器在线Demo版", self.source)
+        self.assertIn("v1.3.16 · 浏览器在线Demo版", self.source)
 
     def test_public_demo_has_safe_browser_entry(self):
         self.assertIn("demo_mode.ensure_demo_data()", self.source)

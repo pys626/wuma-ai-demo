@@ -4773,7 +4773,7 @@ def show_teacher_dashboard():
 def show_sidebar():
     with st.sidebar:
         render_brand_lockup(compact=True)
-        st.caption("v1.3.15 · 浏览器在线Demo版")
+        st.caption("v1.3.16 · 浏览器在线Demo版")
         st.caption("不止评代码，更要评理解")
         st.caption("已内置 LearnBuddy 技能与只读连接器适配包")
         if demo_mode.demo_mode_enabled():

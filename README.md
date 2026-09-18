@@ -1,6 +1,15 @@
-# 悟码AI v1.3.15
+# 悟码AI v1.3.16
 
 面向编程实验的自适应答辩与理解度评测平台。作品采用“浏览器Web Demo + LearnBuddy专家智能体”双入口：Web端呈现学生学习证据与教师诊断闭环，LearnBuddy通过只读技能与MCP查询同一份结构化数据。
+
+## v1.3.16 LearnBuddy状态语义与UTF-8修复
+
+- MCP明确拆分“教师待办队列、教师复核、学生学习、学生反馈”四类状态，避免把“需要巩固”误报为“教师尚未处理”；
+- 空待办不再只返回裸数组，而是返回“状态=空、待办数量=0、当前没有尚未处理的教师任务”的确定性结论；
+- 空字段和旧记录中未单独保存的结论不再返回裸`null`，并明确不得由此推断待复核或待反馈；
+- LearnBuddy Skill规定教师待办只看队列，已复核但仍需巩固应表述为“已处理，但学生仍需巩固”；
+- Windows下MCP标准输入、输出和错误流强制使用UTF-8，降低GBK/UTF-8乱码风险；
+- 不改变数据库结构、历史记录、判题规则、网页Demo数据或MCP只读权限。
 
 ## v1.3.15 浏览器在线Demo与参赛交付
 
@@ -17,7 +26,7 @@
 ### 本地快速预览在线Demo
 
 ```powershell
-Set-Location "D:\AI_Coding\wuma_ai_v1_3_15"
+Set-Location "D:\AI_Coding\wuma_ai_v1_3_16"
 docker compose -f docker-compose.demo.yml up --build
 ```
 
@@ -554,7 +563,7 @@ python -m unittest discover -s tests -v
 预期结果：
 
 ~~~text
-Ran 175 tests
+Ran 182 tests
 OK
 ~~~
 
@@ -569,7 +578,7 @@ python -m streamlit run app.py
 启动后，左侧版本号必须显示：
 
 ~~~text
-v1.3.14 · LearnBuddy 状态一致性版
+v1.3.16 · 浏览器在线Demo版
 ~~~
 
 如果仍显示旧版本号，说明终端启动的仍然是旧文件夹。

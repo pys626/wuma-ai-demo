@@ -9,7 +9,7 @@
 在PowerShell中进入项目目录：
 
 ```powershell
-Set-Location "D:\AI_Coding\wuma_ai_v1_3_15"
+Set-Location "D:\AI_Coding\wuma_ai_v1_3_16"
 docker compose -f docker-compose.demo.yml up --build
 ```
 
@@ -28,7 +28,7 @@ docker compose -f docker-compose.demo.yml down -v
 ### Python方式
 
 ```powershell
-Set-Location "D:\AI_Coding\wuma_ai_v1_3_15"
+Set-Location "D:\AI_Coding\wuma_ai_v1_3_16"
 $env:WUMA_DEMO_MODE="true"
 $env:WUMA_DEMO_READ_ONLY="true"
 $env:CODE_EXECUTION_ENABLED="false"
@@ -43,7 +43,7 @@ python -m streamlit run app.py
 ```powershell
 git init
 git add .
-git commit -m "release: wuma ai v1.3.15 online demo"
+git commit -m "release: wuma ai v1.3.16 status semantics fix"
 git branch -M main
 git remote add origin <你的GitHub或Gitee仓库地址>
 git push -u origin main

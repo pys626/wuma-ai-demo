@@ -51,6 +51,8 @@ class LearnBuddyConnectorTests(unittest.TestCase):
         self.assertIn("列表为空就明确回答", skill_text)
         self.assertIn("不得把“答辩理解度”改写成“综合掌握度”", skill_text)
         self.assertIn("不增加“补充说明”", skill_text)
+        self.assertIn("不得据此推断“待复核”", skill_text)
+        self.assertIn("已处理，但学生仍需巩固", skill_text)
 
     def test_skill_and_setup_describe_platform_model_connector_boundaries(self):
         root = Path(__file__).resolve().parents[1]
@@ -94,9 +96,10 @@ class LearnBuddyConnectorTests(unittest.TestCase):
 
         tasks = self.call_server([{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
             "name": "wuma_pending_teacher_tasks", "arguments": {}}}])[0]
-        task_rows = json.loads(tasks["result"]["content"][0]["text"])
-        self.assertEqual(len(task_rows), result["教师待办总数"])
-        self.assertEqual(task_rows[0]["submission_id"], self.submission)
+        task_result = json.loads(tasks["result"]["content"][0]["text"])
+        self.assertEqual(task_result["教师待办队列"]["待办数量"], result["教师待办总数"])
+        self.assertEqual(len(task_result["任务列表"]), result["教师待办总数"])
+        self.assertEqual(task_result["任务列表"][0]["submission_id"], self.submission)
 
     def test_mastered_submission_is_regular_spot_check_not_pending(self):
         evaluation = {"score": 100, "confidence": "高", "point_assessments": [
@@ -154,8 +157,21 @@ class LearnBuddyConnectorTests(unittest.TestCase):
         self.assertFalse(diagnosis["教师复核"]["是否当前待办"])
         self.assertEqual(progress["提交记录"][0]["教师复核状态"], "已复核")
         self.assertFalse(progress["提交记录"][0]["是否当前待办"])
-        self.assertEqual(pending, [])
+        self.assertEqual(pending["教师待办队列"]["状态"], "空")
+        self.assertEqual(pending["教师待办队列"]["待办数量"], 0)
+        self.assertEqual(pending["任务列表"], [])
         self.assertTrue(any(
             item["submission_id"] == self.submission and item["status"] == "已完成"
             for item in completed
         ))
+
+        contract = diagnosis
+        self.assertEqual(contract["教师待办队列"]["状态"], "空")
+        self.assertEqual(contract["教师复核"]["状态"], "已复核")
+        self.assertEqual(contract["学生学习状态"]["状态"], "需要巩固")
+        self.assertFalse(contract["学生学习状态"]["是否等同教师待办"])
+        self.assertIn("不表示教师尚未处理", contract["状态口径说明"])
+
+    def test_connector_forces_utf8_stdio_on_windows(self):
+        source = (Path(__file__).resolve().parents[1] / "learnbuddy" / "mcp_server.py").read_text(encoding="utf-8")
+        self.assertIn('reconfigure(encoding="utf-8")', source)

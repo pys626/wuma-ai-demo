@@ -7,8 +7,8 @@
 在PowerShell中执行：
 
 ```powershell
-Set-Location D:\AI_Coding\wuma_ai_v1_3_15
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\upgrade_from_v1_3_14.ps1"
+Set-Location D:\AI_Coding\wuma_ai_v1_3_16
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\upgrade_from_v1_3_15.ps1"
 python -m streamlit run app.py
 ```
 
@@ -16,7 +16,7 @@ python -m streamlit run app.py
 
 1. 打开LearnBuddy左侧“专家·技能·连接器”，进入“连接器”。
 2. 选择“自定义连接器”，复制 `mcp_config.example.json` 的内容。
-3. 若项目路径不是 `D:\AI_Coding\wuma_ai_v1_3_15`，将配置中的Python、脚本和数据库路径替换为实际绝对路径。
+3. 若项目路径不是 `D:\AI_Coding\wuma_ai_v1_3_16`，将配置中的Python、脚本和数据库路径替换为实际绝对路径。
 4. 保存后测试连接。应看到4个工具：班级概况、教师待办、学生诊断、学生进展。
 
 示例配置使用已安装依赖的虚拟环境Python：`D:\AI_Coding\.venv\Scripts\python.exe`。如果你的虚拟环境位置不同，只改 `command` 的绝对路径，不要在 `args` 中增加 `-3.12`。
@@ -26,7 +26,7 @@ python -m streamlit run app.py
 ## 3. 导入教师技能
 
 1. 在“技能”页面选择“添加技能”→“导入技能”。
-2. 在文件夹选择器中进入 `D:\AI_Coding\wuma_ai_v1_3_15\learnbuddy\wuma-ai-teacher`，点击“选择文件夹”。
+2. 在文件夹选择器中进入 `D:\AI_Coding\wuma_ai_v1_3_16\learnbuddy\wuma-ai-teacher`，点击“选择文件夹”。
 3. 文件夹选择器只显示子文件夹，因此进入后看似空白是正常现象；不要继续寻找ZIP或单独选择 `SKILL.md`。
 4. 导入成功后，在新任务输入框上方确认已启用“悟码AI教师助手”，并确认“wuma-ai”连接器状态正常。
 
@@ -54,11 +54,11 @@ LearnBuddy、悟码AI网页和连接器的职责如下：
 ```
 
 ```text
-查看当前最需要教师核查的一份提交；如果当前待办为空，直接说明暂无待办并停止。
+查看当前最需要教师核查的一份提交；如果教师待办队列为空，直接说明暂无待办，不要从历史记录中替补。
 ```
 
 ```text
-分析悟码AI提交#5：先给结论，再列出最多3项证据和最多3项建议。
+将悟码AI提交#5作为已处理历史记录进行教学复盘：分别说明教师待办队列、教师复核和学生学习状态，再列出最多3项证据和最多3项建议。
 ```
 
 ```text
