@@ -63,8 +63,8 @@
     },
     {
       "path": "app.py",
-      "bytes": 311299,
-      "sha256": "3e462bb8c4bab189422c00a438860ef965d5f4354d7307710515824a10f2ae5b"
+      "bytes": 311605,
+      "sha256": "dd8851fb5c8ef139032964c446d21717a84902affb6df2ad805a11f48292091d"
     },
     {
       "path": "assignment_drafts.py",
@@ -875,6 +875,16 @@
         "horizontal_overflow": false
       }
     },
-    "layout_cloud_confirmed_by_user": true
+    "layout_cloud_confirmed_by_user": true,
+    "width_followup_20261011": {
+      "desktop_viewport": 1280,
+      "desktop_side_padding_px": 32,
+      "additional_content_width_px": 96,
+      "narrow_viewport": 390,
+      "narrow_side_padding_px": 16,
+      "horizontal_overflow": false,
+      "browser_verified_locally": true,
+      "cloud_confirmed": false
+    }
   }
 }

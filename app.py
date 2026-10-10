@@ -5973,6 +5973,16 @@ def add_styles():
         .stApp {
             background: #ffffff;
         }
+        [data-testid="stMainBlockContainer"] {
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+        @media (max-width: 640px) {
+            [data-testid="stMainBlockContainer"] {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+        }
         .wuma-focus-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:12px 0 20px; }
         .wuma-focus-card { border:1px solid #d9e3ef; border-left:4px solid #4975a7; border-radius:12px; padding:16px 18px; background:#f7faff; min-width:0; }
         .wuma-focus-card:nth-child(3n+2) { border-left-color:#22796b; background:#f5faf8; }
