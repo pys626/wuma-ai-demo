@@ -1,5 +1,5 @@
 {
-  "release": "悟码AI-v1.4-finals-20261010",
+  "release": "悟码AI-v1.4-finals-20261011-layout",
   "files": [
     {
       "path": ".dockerignore",
@@ -63,8 +63,8 @@
     },
     {
       "path": "app.py",
-      "bytes": 311742,
-      "sha256": "7168b5bdfbd9eb506fa6de6216f72f6d2772f74e92ce51b68ced81b8aee9679b"
+      "bytes": 311299,
+      "sha256": "3e462bb8c4bab189422c00a438860ef965d5f4354d7307710515824a10f2ae5b"
     },
     {
       "path": "assignment_drafts.py",
@@ -658,8 +658,8 @@
     },
     {
       "path": "tests/test_app_flow.py",
-      "bytes": 75932,
-      "sha256": "999af4f4d905d2cf98a469a934e607ace598fe7d32bcfe5a25b5b1172cd34ff5"
+      "bytes": 75999,
+      "sha256": "f751fc692b36f6e071f6e706b07debcaa090af0dde00d55deef8ba0bdc4c72b2"
     },
     {
       "path": "tests/test_assignment_drafts.py",
@@ -855,7 +855,25 @@
       "passed": 39
     },
     "genuine_model_requests": 26,
-    "cloud_published": false,
-    "video_recorded": false
+    "cloud_published": true,
+    "video_recorded": false,
+    "layout_retest_20261011": {
+      "app_flow": {
+        "total": 48,
+        "passed": 48
+      },
+      "finals_demo_data": {
+        "total": 3,
+        "passed": 3
+      },
+      "local_browser": {
+        "desktop_width": 1280,
+        "narrow_width": 390,
+        "empty_hero_removed": true,
+        "teacher_panels_stacked": true,
+        "summary_cards_responsive": true,
+        "horizontal_overflow": false
+      }
+    }
   }
 }

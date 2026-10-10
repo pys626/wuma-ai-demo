@@ -33,13 +33,6 @@ import evaluation_benchmark
 from local_store import fingerprint, read_json, write_json
 
 
-st.set_page_config(
-    page_title="悟码AI",
-    page_icon=":material/code:",
-    layout="wide",
-)
-
-
 STUDENT_PAGES = [
     "首页",
     "任务中心",
@@ -977,7 +970,6 @@ def show_home():
         st.button("进入账号与系统管理", type="primary",
                   on_click=request_navigation, args=("账号与系统管理",))
         return
-    st.markdown("<div class='hero'>", unsafe_allow_html=True)
     render_brand_lockup()
     st.subheader("面向编程实验的自适应答辩与理解度评测平台")
     st.markdown("### 不止评代码，更要评理解。")
@@ -991,8 +983,6 @@ def show_home():
             "学生提交C++代码后，系统先形成编译与测试证据，AI再围绕本人代码和"
             "真实验证结果生成个性化问题，并通过答辩与教师复核形成学习证据。"
         )
-    st.markdown("</div>", unsafe_allow_html=True)
-
     st.write("")
     published_count = len(db.list_assignments(published_only=True))
     col1, col2, col3 = st.columns(3)
@@ -5060,12 +5050,9 @@ def render_teacher_student_case(record, focused_task=None):
                 render_teacher_digest(record, preliminary_review, report, qa_records, student_feedbacks)
             render_teacher_evidence_workspace(submission, preliminary_review, report, qa_records)
         elif focused_task["action"] == "review_submission":
-            action_col, evidence_col = st.columns([2, 3], gap="large")
-            with action_col:
-                with st.container(border=True, key="teacher_review_focus"):
-                    render_teacher_review_actions(selected_id, report, review_history)
-            with evidence_col:
-                render_teacher_digest(record, preliminary_review, report, qa_records, student_feedbacks)
+            with st.container(border=True, key="teacher_review_focus"):
+                render_teacher_review_actions(selected_id, report, review_history)
+            render_teacher_digest(record, preliminary_review, report, qa_records, student_feedbacks)
             render_teacher_evidence_workspace(submission, preliminary_review, report, qa_records)
         else:
             st.subheader("重新答辩进度")
@@ -5074,12 +5061,9 @@ def render_teacher_student_case(record, focused_task=None):
             render_teacher_digest(record, preliminary_review, report, qa_records, student_feedbacks)
             render_teacher_evidence_workspace(submission, preliminary_review, report, qa_records)
         return
-    action_col, summary_col = st.columns([2, 3], gap="large")
-    with action_col:
-        with st.container(border=True):
-            render_teacher_review_actions(selected_id, report, review_history)
-    with summary_col:
-        render_teacher_digest(record, preliminary_review, report, qa_records, student_feedbacks)
+    with st.container(border=True):
+        render_teacher_review_actions(selected_id, report, review_history)
+    render_teacher_digest(record, preliminary_review, report, qa_records, student_feedbacks)
     render_teacher_evidence_workspace(submission, preliminary_review, report, qa_records)
     render_teacher_feedback_actions(student_feedbacks)
     st.caption("AI诊断用于辅助核查，教师应结合学生回答与原始证据作出结论。")
@@ -6080,12 +6064,6 @@ def add_styles():
             background: #ffffff;
             border-top: 4px solid #7396BE;
         }
-        .hero {
-            padding: 1.5rem 1.8rem;
-            border-radius: 18px;
-            background: #F7F9FC;
-            border: 1px solid #d9e7ff;
-        }
         .wuma-brand-lockup {
             display: flex;
             align-items: center;
@@ -6464,6 +6442,12 @@ def restore_browser_view(actor, view, classes):
 
 
 def main():
+    # The Cloud entry imports this module once, but calls main on every rerun.
+    st.set_page_config(
+        page_title="悟码AI",
+        page_icon=":material/code:",
+        layout="wide",
+    )
     if demo_mode.demo_mode_enabled():
         try:
             demo_mode.prepare_demo_database(db.DB_PATH)

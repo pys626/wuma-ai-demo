@@ -359,8 +359,9 @@ class AppFlowTests(unittest.TestCase):
                                      for col in app.get("column")))
                 self.assertTrue(any(item.label == "查看代码测试结果与运行证据" for item in app.expander))
                 self.assertTrue(any(item.label == "查看评分点初评依据" for item in app.expander))
-                self.assertTrue(any(any(item.value == "完成教师复核" for item in col.subheader)
-                                    for col in app.get("column")))
+                self.assertFalse(any(any(item.value in {"完成教师复核", "教师诊断摘要"}
+                                         for item in col.subheader)
+                                     for col in app.get("column")))
                 heads = [item.value for item in app.subheader]
                 self.assertLess(heads.index("完成教师复核"), heads.index("其他原始材料（按需展开）"))
                 for expander in app.expander:
