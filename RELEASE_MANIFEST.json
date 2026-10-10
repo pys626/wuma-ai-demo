@@ -188,8 +188,8 @@
     },
     {
       "path": "FINALS_DEMO_SETUP.md",
-      "bytes": 2441,
-      "sha256": "7f76af309f3e357f1be0f094bbd8e0461250cd01fa5671630d2fc64c8be4730c"
+      "bytes": 2456,
+      "sha256": "b328b44f0222e1bf2a62566a8a9d33f8a5fcf7a6343a05287dd1ee0128d62453"
     },
     {
       "path": "FOUR_IMPROVEMENTS_ACCEPTANCE.md",
@@ -238,8 +238,8 @@
     },
     {
       "path": "ONLINE_DEMO_SETUP.md",
-      "bytes": 2706,
-      "sha256": "aec70c0e8f5cdef969953432513ea8266972915acaeea1664eca36d8ce1085f4"
+      "bytes": 2761,
+      "sha256": "054b9a9bd05121846d7c0ccb4cfb5fb6782ea41c68dae00d09d8a86570e57500"
     },
     {
       "path": "README.md",
@@ -874,6 +874,7 @@
         "summary_cards_responsive": true,
         "horizontal_overflow": false
       }
-    }
+    },
+    "layout_cloud_confirmed_by_user": true
   }
 }
