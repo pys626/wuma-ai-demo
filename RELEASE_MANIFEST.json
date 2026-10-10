@@ -1,5 +1,5 @@
 {
-  "release": "悟码AI-v1.4-finals-20261011-login-layout",
+  "release": "悟码AI-v1.4-finals-20261011-login-target-width",
   "files": [
     {
       "path": ".dockerignore",
@@ -63,8 +63,8 @@
     },
     {
       "path": "app.py",
-      "bytes": 311647,
-      "sha256": "f50d81f22ec5f1d8160f756dbe9d940706626f7e4d3881bdd825e5bff0cec17d"
+      "bytes": 311997,
+      "sha256": "3d4dfc6e485374d3b14dacf788d02dd2fd05b4edc7249cae7ef585b886c2ab13"
     },
     {
       "path": "assignment_drafts.py",
@@ -899,6 +899,26 @@
       "narrow_side_padding_px": 16,
       "horizontal_overflow": false,
       "public_entry_tests": {
+        "total": 3,
+        "passed": 3
+      },
+      "browser_verified_locally": true,
+      "cloud_confirmed": true,
+      "confirmation_source": "用户截图显示居中样式已生效，但希望加宽至红框比例"
+    },
+    "login_target_width_20261011": {
+      "date": "2026-10-11",
+      "login_layout": "custom_centered_width",
+      "login_content_width_percent": 82,
+      "authenticated_layout": "wide",
+      "desktop_viewport": 1280,
+      "login_container_width_px": 1105,
+      "authenticated_container_width_px": 1014,
+      "student_and_teacher_switch_verified": true,
+      "narrow_viewport": 390,
+      "narrow_side_padding_px": 16,
+      "horizontal_overflow": false,
+      "previous_public_entry_tests": {
         "total": 3,
         "passed": 3
       },

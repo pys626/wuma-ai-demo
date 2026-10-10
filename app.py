@@ -195,7 +195,21 @@ def logout():
 
 def show_login():
     """公开Demo采用合成身份；完整本地版使用个人账号。"""
-    st.set_page_config(layout="centered")
+    st.markdown(
+        """
+        <style>
+        [data-testid="stMainBlockContainer"] {
+            max-width: none;
+            width: min(100%, calc(82% + 4rem));
+            margin-inline: auto;
+        }
+        @media (max-width: 640px) {
+            [data-testid="stMainBlockContainer"] { width: 100%; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     render_brand_lockup()
     if demo_mode.demo_mode_enabled():
         st.title("登录悟码AI")
