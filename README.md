@@ -4,6 +4,8 @@
 
 ## 在线只读入口
 
+决赛 Demo：[https://wuma-ai-finals-pys626.streamlit.app/](https://wuma-ai-finals-pys626.streamlit.app/)。当前部署分支为 `finals-20261010`；提交材料中的源码链接请使用该分支。
+
 Streamlit入口文件：`competition_demo.py`。本入口强制只读、不调用模型、不执行学生代码，使用独立合成数据库。包含2026-10-10保存的真实模型评价：案例甲遗漏边界后补答；案例乙持续误解后由教师要求重新答辩。作答为人工设计，不对应真实学生，不能当作实际教学效果或总体准确率。
 
 ```powershell

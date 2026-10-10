@@ -188,8 +188,8 @@
     },
     {
       "path": "FINALS_DEMO_SETUP.md",
-      "bytes": 2074,
-      "sha256": "00d4c3bd249b49a7edc8943d1647d463b58fc9eaa9dfc3bccdf8f66542df9050"
+      "bytes": 2441,
+      "sha256": "7f76af309f3e357f1be0f094bbd8e0461250cd01fa5671630d2fc64c8be4730c"
     },
     {
       "path": "FOUR_IMPROVEMENTS_ACCEPTANCE.md",
@@ -238,13 +238,13 @@
     },
     {
       "path": "ONLINE_DEMO_SETUP.md",
-      "bytes": 2637,
-      "sha256": "84224ea5969a8635da6f023fcff845af3123c881fd3b9aba11b64f76ce23aa77"
+      "bytes": 2706,
+      "sha256": "aec70c0e8f5cdef969953432513ea8266972915acaeea1664eca36d8ce1085f4"
     },
     {
       "path": "README.md",
-      "bytes": 2256,
-      "sha256": "fcf169c0d26453258c821321287a0896b1ced56b33840407cace04ccd7d3961e"
+      "bytes": 2460,
+      "sha256": "24581fab89a577fbef858e71975765c82767599bcd1cda1bccf5f5b0956f45f7"
     },
     {
       "path": "requirements.txt",
