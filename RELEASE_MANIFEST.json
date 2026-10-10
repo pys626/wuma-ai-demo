@@ -1,5 +1,5 @@
 {
-  "release": "悟码AI-v1.4-finals-20261011-layout",
+  "release": "悟码AI-v1.4-finals-20261011-login-layout",
   "files": [
     {
       "path": ".dockerignore",
@@ -63,8 +63,8 @@
     },
     {
       "path": "app.py",
-      "bytes": 311605,
-      "sha256": "dd8851fb5c8ef139032964c446d21717a84902affb6df2ad805a11f48292091d"
+      "bytes": 311647,
+      "sha256": "f50d81f22ec5f1d8160f756dbe9d940706626f7e4d3881bdd825e5bff0cec17d"
     },
     {
       "path": "assignment_drafts.py",
@@ -883,6 +883,25 @@
       "narrow_viewport": 390,
       "narrow_side_padding_px": 16,
       "horizontal_overflow": false,
+      "browser_verified_locally": true,
+      "cloud_confirmed": true,
+      "confirmation_source": "用户：但是登录页面显得宽了，其他的很好"
+    },
+    "login_layout_20261011": {
+      "date": "2026-10-11",
+      "login_layout": "centered",
+      "authenticated_layout": "wide",
+      "desktop_viewport": 1280,
+      "login_container_width_px": 736,
+      "authenticated_container_width_px": 1014,
+      "student_and_teacher_switch_verified": true,
+      "narrow_viewport": 390,
+      "narrow_side_padding_px": 16,
+      "horizontal_overflow": false,
+      "public_entry_tests": {
+        "total": 3,
+        "passed": 3
+      },
       "browser_verified_locally": true,
       "cloud_confirmed": false
     }

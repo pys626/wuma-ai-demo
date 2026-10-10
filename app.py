@@ -195,6 +195,7 @@ def logout():
 
 def show_login():
     """公开Demo采用合成身份；完整本地版使用个人账号。"""
+    st.set_page_config(layout="centered")
     render_brand_lockup()
     if demo_mode.demo_mode_enabled():
         st.title("登录悟码AI")
