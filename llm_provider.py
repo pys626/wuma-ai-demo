@@ -8,6 +8,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import runtime_config
+import ai_budget
+
 from dotenv import load_dotenv
 from openai import (
     APIConnectionError,
@@ -20,7 +23,8 @@ from openai import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
+if not runtime_config.demo_mode_enabled():
+    load_dotenv(BASE_DIR / ".env")
 
 
 class LLMProviderError(Exception):
@@ -169,8 +173,8 @@ def _create_client(config):
 
     options = {
         "api_key": config.api_key,
-        "timeout": 75.0,
-        "max_retries": 1,
+        "timeout": max(0.1, min(ai_budget.REQUEST_SECONDS, ai_budget.remaining())),
+        "max_retries": 0,
     }
     if config.base_url:
         options["base_url"] = config.base_url
@@ -179,6 +183,10 @@ def _create_client(config):
 
 def chat_text(messages, max_tokens=1800):
     """通过OpenAI兼容接口发送消息，并返回模型的文本内容。"""
+    if runtime_config.demo_mode_enabled():
+        raise LLMProviderError("赛事只读Demo不调用模型服务，请使用完整本地版。")
+    if ai_budget.remaining() <= 0:
+        raise LLMProviderError("本次AI操作已到等待上限，请从已保存阶段继续。")
     config = load_config()
     client = _create_client(config)
     request = {
@@ -213,6 +221,13 @@ def chat_text(messages, max_tokens=1800):
         raise LLMProviderError(message) from error
     except Exception as error:
         raise LLMProviderError("调用大模型时出现未知错误，请稍后重试。") from error
+    finally:
+        close = getattr(client, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
 
     content = response.choices[0].message.content
     if not content or not content.strip():

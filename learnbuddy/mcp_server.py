@@ -1,6 +1,7 @@
 """悟码AI只读 MCP 连接器，供 LearnBuddy 教师助手读取结构化诊断。"""
 import json
 import os
+import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import database as db  # noqa: E402
 import teacher_insights as insights  # noqa: E402
+import runtime_config  # noqa: E402
+import demo_mode  # noqa: E402
+import accounts  # noqa: E402
+import access_control  # noqa: E402
+from contextlib import nullcontext
 
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -29,6 +35,8 @@ def configure_stdio_utf8():
 def data_snapshot(records):
     ids = [int(item["id"]) for item in records if item.get("id") is not None]
     return {
+        "数据源标识": runtime_config.database_id(db.DB_PATH),
+        "运行模式": "赛事只读Demo" if runtime_config.demo_mode_enabled() else "完整本地版",
         "读取时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "最新提交编号": max(ids) if ids else None,
     }
@@ -39,6 +47,10 @@ def compact_code(record):
     status = verification.get("overall_status", "未执行")
     passed, total = verification.get("passed", 0), verification.get("total", 0)
     score, maximum = verification.get("score"), verification.get("max_score")
+    if verification.get("scoring_mode") == "pass_only":
+        return {"status": status, "passed": passed, "total": total,
+                "score": "不计分", "max_score": "不计分", "scoring_mode": "pass_only",
+                "准入规则": "全部公开与隐藏样例通过"}
     return {
         "status": status,
         "passed": passed,
@@ -60,6 +72,17 @@ def scoped_teacher_queue(tasks, submission_id=None):
         "待办数量": len(scoped),
         "任务类型": task_types,
         "结论": "存在尚未处理的教师任务" if scoped else "当前没有尚未处理的教师任务",
+    }
+
+
+def metric_definitions():
+    """Supply subject, source and scope alongside stable machine-readable field names."""
+    return {
+        "状态": "该次提交的答辩与报告生成进度；已完成不等于教师已复核。",
+        "答辩理解度": "AI根据该学生该次答辩回答给出的0—100分评价；不是课程成绩。",
+        "评分点证据覆盖度": "AI对该次提交的代码、思路和选做报告进行评分点初评得到的证据覆盖度；不是答辩理解度。",
+        "学生学习状态": "AI对该学生本次答辩已考查要点的判断；回答遗漏不能直接认定学生误解，不代表全部课程知识。",
+        "教师复核状态": "教师对该提交的人工处理进度；须与AI学习判断分别陈述。",
     }
 
 
@@ -92,7 +115,8 @@ def workflow_contract(record, review_state, mastery, feedbacks, tasks):
         },
         "学生学习": {
             "状态": mastery.get("status", "证据不足"),
-            "说明": mastery.get("text", ""),
+            "说明": "AI根据该学生本次答辩判断：" + insights.mastery_statement(mastery.get("status", "证据不足")) + "。判断依据：" + mastery.get("text", ""),
+            "评价来源": "AI对该学生该次答辩回答的评价",
             "是否等同教师待办": False,
         },
         "学生反馈": {
@@ -109,7 +133,9 @@ def overview(arguments):
     tasks = db.list_teacher_tasks(assignment_id=assignment_id)
     latest = {}
     for record in records:
-        if record.get("status") != "已完成" or record.get("overall") is None:
+        if record.get("status") != "已完成":
+            continue
+        if record.get("overall") is None and record.get("assessment_complete") is not False:
             continue
         student = str(record.get("student_id") or "").strip() or f"submission:{record['id']}"
         assignment = record.get("assignment_id")
@@ -117,7 +143,7 @@ def overview(arguments):
         key = (student, assignment)
         if key not in latest or int(record["id"]) > int(latest[key]["id"]):
             latest[key] = record
-    scores = [item["overall"] for item in latest.values()]
+    scores = [item["overall"] for item in latest.values() if item["overall"] is not None]
     pending_review = sum(
         item.get("task_type") == "人工复核" and item.get("status") == "待处理"
         for item in tasks
@@ -177,6 +203,7 @@ def overview(arguments):
             ),
         }
     return {
+        "字段说明": metric_definitions(),
         "数据快照": data_snapshot(records),
         "统计口径": "每名学生、每个实验取最新一次已完成答辩；历史记录仍保留",
         "指标口径": "代码判题、答辩理解度与评分点证据覆盖度相互独立，均不等同课程成绩",
@@ -201,6 +228,8 @@ def pending_tasks(arguments):
         "submission_id", "assignment_id", "action_label",
     )} for item in tasks]
     return {
+        "字段说明": metric_definitions(),
+        "数据快照": data_snapshot(db.list_submissions(assignment_id=arguments.get("assignment_id"))),
         "教师待办队列": scoped_teacher_queue(all_tasks),
         "任务列表": rows,
         "口径说明": "仅列出当前尚未处理的教师任务；空队列时不得从历史记录中另选提交冒充待办。",
@@ -233,9 +262,11 @@ def student_diagnosis(arguments):
             "题号": index,
             "维度": item.get("dimension") or "综合理解",
             "证据状态": status,
+            "AI判断说明": "AI根据该学生本题回答判断：" + insights.mastery_statement(status, "本题考查的要点"),
             "摘要": detail,
         })
     return {
+        "字段说明": metric_definitions(),
         "数据快照": data_snapshot([record]),
         "提交": submission_id,
         "学生": {"学号": record.get("student_id"), "姓名": record.get("name")},
@@ -243,6 +274,8 @@ def student_diagnosis(arguments):
         "代码判题": compact_code(record),
         "评分点证据覆盖度": preliminary.get("completion_score") if preliminary else None,
         "答辩理解度": report.get("overall") if report else None,
+        "四维作答依据": compact_dimension_evidence((report or {}).get("dimension_evidence", {})),
+        "评价完整性": (report or {}).get("assessment_complete"),
         "掌握证据": mastery,
         "重点关注": insights.ranked_concerns(record, preliminary, report, qa),
         "逐题证据摘要": questions,
@@ -261,6 +294,26 @@ def student_diagnosis(arguments):
         "待处理反馈数": sum(item.get("status") == "待处理" for item in feedbacks),
         "隐私说明": "未输出学生代码、回答原文、隐藏测试输入输出或隐藏教学重点",
     }
+
+
+def compact_dimension_evidence(evidence):
+    """Expose point locations/status; full answers and hidden references stay on Web."""
+    if not isinstance(evidence, dict):
+        return {}
+    result = {}
+    for dimension, item in evidence.items():
+        if not isinstance(item, dict):
+            continue
+        result[dimension] = {
+            "status": item.get("status"),
+            "score": item.get("score"),
+            "points": [
+                {key: point.get(key) for key in ("question", "status", "source", "confidence", "usable")}
+                for point in (item.get("points") or []) if isinstance(point, dict)
+            ],
+            "reason": "仅提供题号、掌握状态与证据来源；回答原文和考查要点请在教师网页核对。",
+        }
+    return result
 
 
 def student_progress(arguments):
@@ -300,6 +353,7 @@ def student_progress(arguments):
             "状态口径说明": workflow["口径说明"],
         })
     return {
+        "字段说明": metric_definitions(),
         "数据快照": data_snapshot(records),
         "学号": student_id,
         "指标口径": "代码判题、答辩理解度与评分点证据覆盖度应分别陈述",
@@ -308,13 +362,13 @@ def student_progress(arguments):
 
 
 TOOLS = [
-    {"name": "wuma_teacher_overview", "description": "查看悟码AI班级概况、教师待办数量和当前评测异常；可按实验筛选。",
+    {"name": "wuma_teacher_overview", "description": "查看悟码AI班级概况、教师待办数量和当前代码评测异常；答辩理解度是AI对学生本次回答的评分，可按实验筛选。",
      "inputSchema": {"type": "object", "properties": {"assignment_id": {"type": "integer", "description": "实验ID；省略表示全部实验"}}}},
     {"name": "wuma_pending_teacher_tasks", "description": "列出悟码AI当前尚未处理的教师任务；空队列表示没有教师待办，不得从历史记录替补。",
      "inputSchema": {"type": "object", "properties": {"assignment_id": {"type": "integer"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}}},
     {"name": "wuma_student_diagnosis", "description": "按提交编号读取精简、可核查的学生诊断，不返回学生代码、回答原文、隐藏测试和隐藏教学重点。",
      "inputSchema": {"type": "object", "properties": {"submission_id": {"type": "integer", "minimum": 1}}, "required": ["submission_id"]}},
-    {"name": "wuma_student_progress", "description": "按学号查看各次提交的判题、答辩理解度、证据覆盖与统一教师复核状态。",
+    {"name": "wuma_student_progress", "description": "按学号查看该学生各次提交的代码测试结果、AI答辩理解度、证据覆盖与教师复核进度；分数变化不能直接证明学习进步。",
      "inputSchema": {"type": "object", "properties": {"student_id": {"type": "string", "minLength": 1}}, "required": ["student_id"]}},
 ]
 
@@ -337,7 +391,7 @@ def reply(message):
         return {"jsonrpc": "2.0", "id": request_id, "result": {
             "protocolVersion": selected_protocol,
             "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "wuma-ai-learnbuddy", "version": "1.3.16"},
+            "serverInfo": {"name": "wuma-ai-learnbuddy", "version": "1.4.0"},
         }}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}
@@ -349,9 +403,25 @@ def reply(message):
         if name not in HANDLERS:
             return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32602, "message": "未知工具"}}
         try:
-            result = HANDLERS[name](params.get("arguments") or {})
+            if runtime_config.demo_mode_enabled():
+                demo_mode.validate_demo_database(db.DB_PATH)
+            context = nullcontext()
+            if not runtime_config.demo_mode_enabled() and accounts.enabled():
+                actor = accounts.connector_account(os.getenv("WUMA_TEACHER_TOKEN", ""))
+                if not actor:
+                    raise PermissionError("请从教师端的班级与学生管理生成个人只读连接配置；旧连接已停用。")
+                context = access_control.scope(actor)
+            with context:
+                result = HANDLERS[name](params.get("arguments") or {})
             content = json.dumps(result, ensure_ascii=False, indent=2)
             return {"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": content}], "isError": False}}
+        except sqlite3.Error:
+            text = (
+                "数据库读取失败：文件不存在、暂时被占用、已损坏或结构不兼容。"
+                "请核对网页与连接器的数据库路径，并用网页启动入口初始化或升级该库后重试。"
+                f" 数据源标识：{runtime_config.database_id(db.DB_PATH)}"
+            )
+            return {"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
         except (ValueError, TypeError, KeyError, OSError) as error:
             return {"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": f"调用失败：{error}"}], "isError": True}}
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "不支持的方法"}}
@@ -359,6 +429,7 @@ def reply(message):
 
 def main():
     configure_stdio_utf8()
+    db.READ_ONLY = True
     db_path = Path(os.getenv("WUMA_AI_DB_PATH", str(db.DB_PATH)))
     if not db_path.is_file():
         print(f"悟码AI数据库不存在：{db_path}", file=sys.stderr, flush=True)

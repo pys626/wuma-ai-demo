@@ -1,3 +1,4 @@
+from auth_helpers import authenticate, load_teacher_draft
 import json
 import re
 import tempfile
@@ -10,6 +11,8 @@ from unittest.mock import patch
 import database as db
 import code_verifier as verifier
 import llm_service as llm
+import assignment_drafts
+import student_drafts
 
 
 QUESTIONS = [
@@ -242,6 +245,7 @@ class AppFlowTests(unittest.TestCase):
         app.session_state["form_name"] = name
         app.session_state["form_student_id"] = student_id
         app.session_state["current_page"] = "首页"
+        authenticate(app, role, student_id, name)
         return app.run(timeout=20)
 
     def _open_teacher_dashboard(self):
@@ -285,7 +289,7 @@ class AppFlowTests(unittest.TestCase):
             any(item.value == "教师诊断摘要" for item in app.subheader)
         )
         self.assertTrue(
-            any(item.label == "选择要处理的学生" for item in app.selectbox)
+            any(item.label == "选择要处理的提交" for item in app.selectbox)
         )
         self.assertTrue(
             any(
@@ -329,14 +333,14 @@ class AppFlowTests(unittest.TestCase):
             item for item in app.radio if item.label == "工作区域"
         ).set_value("班级分析").run(timeout=20)
         self.assertTrue(
-            any(item.value == "隐藏测试点通过率" for item in app.subheader)
+            any(item.value == "代码测试点通过率" for item in app.subheader)
         )
         self.assertTrue(
             any("全部负数" in item.value for item in app.markdown)
         )
         self.assertEqual(len(app.exception), 0)
 
-    def test_both_teacher_views_fold_originals_and_place_review_beside_evidence(self):
+    def test_both_teacher_views_fold_originals_and_give_evidence_full_width(self):
         long_answer = "这是一段需要按需展开的学生回答。" * 100
         long_evaluation = "完整AI评价不能直接堆在页面上。" * 100
         with db.get_connection() as connection:
@@ -350,9 +354,11 @@ class AppFlowTests(unittest.TestCase):
                 next(item for item in app.radio if item.label == "工作区域").set_value(view).run(timeout=20)
                 self.assertEqual(len(app.exception), 0)
                 self.assertEqual(sum(item.label == "保存教师复核" for item in app.button), 1)
-                evidence_column = next(col for col in app.get("column")
-                                       if any(item.value == "知识掌握与关键证据" for item in col.subheader))
-                self.assertFalse(any(item.value == "完成教师复核" for item in evidence_column.subheader))
+                self.assertTrue(any(item.value == "AI对本次答辩的判断与作答证据" for item in app.subheader))
+                self.assertFalse(any(any(item.value == "AI对本次答辩的判断与作答证据" for item in col.subheader)
+                                     for col in app.get("column")))
+                self.assertTrue(any(item.label == "查看代码测试结果与运行证据" for item in app.expander))
+                self.assertTrue(any(item.label == "查看评分点初评依据" for item in app.expander))
                 self.assertTrue(any(any(item.value == "完成教师复核" for item in col.subheader)
                                     for col in app.get("column")))
                 heads = [item.value for item in app.subheader]
@@ -382,7 +388,7 @@ class AppFlowTests(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(db.get_teacher_review(self.submission_id)["confirmed_overall"], 76)
         next(item for item in app.radio if item.label == "工作区域").set_value("待办处理").run(timeout=20)
-        self.assertTrue(any("教师确认理解度76/100" in item.value for item in app.success))
+        self.assertTrue(any("教师确认理解度：76/100" in item.value for item in app.success))
         self.assertEqual(len(db.list_teacher_review_history(self.submission_id)), 1)
 
     def test_teacher_review_can_be_saved_without_comment(self):
@@ -429,29 +435,29 @@ class AppFlowTests(unittest.TestCase):
             "2026-09-15 12:00", QUESTIONS,
         )
         app = self._open_teacher_dashboard()
-        selector = next(item for item in app.selectbox if item.label == "选择要处理的学生")
-        selector.set_value(next(label for label in selector.options if label.startswith(f"提交#{second_id} ·"))).run(timeout=20)
+        selector = next(item for item in app.selectbox if item.label == "选择要处理的提交")
+        selector.set_value(next(label for label in selector.options if label.startswith(f"提交编号：{second_id} ·"))).run(timeout=20)
         for view, expected_rows in [("待办处理", 1), ("班级分析", 2)]:
             next(item for item in app.radio if item.label == "工作区域").set_value(view).run(timeout=20)
             elements = list(app.main.children.values())
             select_index = next(i for i, item in enumerate(elements)
-                                if item.type == "selectbox" and item.label == "选择要处理的学生")
+                                if item.type == "selectbox" and item.label == "选择要处理的提交")
             table_index = next(i for i, item in enumerate(elements)
-                               if item.type == "markdown" and "<th>提交</th>" in item.value)
+                               if item.type == "markdown" and "<th>提交信息</th>" in item.value)
             self.assertLess(select_index, table_index)
             table = elements[table_index].value
             body = re.search(r"<tbody>(.*?)</tbody>", table, re.S).group(1)
             self.assertEqual(len(re.findall(r"<tr\b", body)), expected_rows)
             highlighted = re.findall(r'<tr class="wuma-selected-row"[^>]*>(.*?)</tr>', body, re.S)
             self.assertEqual(len(highlighted), 1)
-            self.assertIn(f"#{second_id}</td>", highlighted[0])
+            self.assertIn(f"提交编号：{second_id}", highlighted[0])
             self.assertTrue(any("当前学生 · 新同学" in item.value for item in app.subheader))
             self.assertEqual(len(app.exception), 0)
         next(item for item in app.selectbox if item.label == "筛选学生状态").set_value("有学生反馈").run(timeout=20)
         self.assertEqual(app.session_state["teacher_selected_submission_id"], self.submission_id)
         self.assertTrue(any("原选中记录已不在" in item.value for item in app.info))
         next(item for item in app.selectbox if item.label == "筛选学生状态").set_value("评测需关注").run(timeout=20)
-        self.assertFalse(any(item.label == "选择要处理的学生" for item in app.selectbox))
+        self.assertFalse(any(item.label == "选择要处理的提交" for item in app.selectbox))
         self.assertTrue(any("没有学生记录" in item.value for item in app.info))
         self.assertEqual(len(app.exception), 0)
 
@@ -473,8 +479,8 @@ class AppFlowTests(unittest.TestCase):
         metrics = {item.label: item.value for item in app.metric}
         self.assertEqual(metrics["历史提交总数"], "4")
         self.assertEqual(metrics["纳入统计的已完成答辩"], "2")
-        self.assertEqual(metrics["平均理解度"], "60")
-        self.assertEqual(metrics["待人工复核"], "3")
+        self.assertEqual(metrics["平均AI答辩理解度"], "60")
+        self.assertEqual(metrics["待教师复核提交数"], "3")
         self.assertTrue(any("重答未完成时沿用上一次" in item.value for item in app.caption))
         self.assertEqual(len(db.list_submissions()), 4)
         self.assertEqual(len(db.list_learning_records()), 3)
@@ -488,7 +494,7 @@ class AppFlowTests(unittest.TestCase):
         next(item for item in app.radio if item.label == "工作区域").set_value("班级分析").run(timeout=20)
         metrics = {item.label: item.value for item in app.metric}
         self.assertEqual(metrics["纳入统计的已完成答辩"], "0")
-        self.assertEqual(metrics["平均理解度"], "暂无")
+        self.assertEqual(metrics["平均AI答辩理解度"], "暂无")
         self.assertEqual(len(app.exception), 0)
 
     def test_teacher_summary_and_class_charts_show_values_without_hover(self):
@@ -555,7 +561,7 @@ class AppFlowTests(unittest.TestCase):
             )
             submission_page.click().run(timeout=20)
             explanation = next(
-                item for item in app.text_area if item.label == "解题思路"
+                item for item in app.text_area if item.label.startswith("解题思路")
             )
             lab_report = next(
                 item for item in app.text_area if item.label == "实验报告（选做）"
@@ -585,6 +591,7 @@ class AppFlowTests(unittest.TestCase):
             saved["code_verification"]["overall_status"],
             "全部通过",
         )
+        self.assertIsNone(student_drafts.load_draft(db.DB_PATH, "20260001", saved["assignment_id"]))
         self.assertTrue(any("问题1" in item.value for item in app.subheader))
         self.assertEqual(len(app.exception), 0)
 
@@ -603,7 +610,7 @@ class AppFlowTests(unittest.TestCase):
                 button for button in app.button if button.label == "实验提交"
             ).click().run(timeout=20)
             next(
-                item for item in app.text_area if item.label == "解题思路"
+                item for item in app.text_area if item.label.startswith("解题思路")
             ).set_value("使用循环处理数组。")
             next(
                 button for button in app.button if button.label == "正式评测代码"
@@ -638,7 +645,7 @@ class AppFlowTests(unittest.TestCase):
                 button for button in app.button if button.label == "实验提交"
             ).click().run(timeout=20)
             next(
-                item for item in app.text_area if item.label == "解题思路"
+                item for item in app.text_area if item.label.startswith("解题思路")
             ).set_value("使用循环处理数组。")
             next(
                 button for button in app.button if button.label == "正式评测代码"
@@ -673,7 +680,7 @@ class AppFlowTests(unittest.TestCase):
                 button for button in app.button if button.label == "实验提交"
             ).click().run(timeout=20)
             next(
-                item for item in app.text_area if item.label == "解题思路"
+                item for item in app.text_area if item.label.startswith("解题思路")
             ).set_value("使用循环处理数组。")
             next(
                 button for button in app.button if button.label == "正式评测代码"
@@ -929,7 +936,7 @@ class AppFlowTests(unittest.TestCase):
                 button for button in app.button if button.label == "实验提交"
             ).click().run(timeout=20)
             next(
-                item for item in app.text_area if item.label == "解题思路"
+                item for item in app.text_area if item.label.startswith("解题思路")
             ).set_value("想")
             judge = next(
                 button
@@ -942,6 +949,8 @@ class AppFlowTests(unittest.TestCase):
             )
             submit.click().run(timeout=20)
             self.assertTrue(any("临时连接失败" in item.value for item in app.error))
+            assignment = db.list_assignments()[0]
+            self.assertEqual(student_drafts.load_draft(db.DB_PATH, "20260001", assignment["id"])["data"]["explanation"], "想")
 
             retry = next(
                 button
@@ -1015,6 +1024,54 @@ class AppFlowTests(unittest.TestCase):
         )
         self.assertEqual(len(app.exception), 0)
 
+    def test_archive_loads_report_only_when_expanded_and_can_collapse(self):
+        app = self._start_app(student_id="20260006", name="界面测试同学")
+        with (
+            patch.object(db, "get_report", wraps=db.get_report) as report_reader,
+            patch.object(db, "get_qa_records", wraps=db.get_qa_records) as question_reader,
+        ):
+            next(button for button in app.button if button.label == "学习档案").click().run(timeout=20)
+            report_reader.assert_not_called()
+            question_reader.assert_not_called()
+            self.assertFalse(any(item.value == "诊断证据" for item in app.subheader))
+            next(item for item in app.toggle if item.key == "archive_report_expanded").set_value(True).run(timeout=20)
+            report_reader.assert_called_once_with(self.submission_id)
+            question_reader.assert_called_once_with(self.submission_id)
+            self.assertTrue(any(item.value == "诊断证据" for item in app.subheader))
+            next(item for item in app.toggle if item.key == "archive_report_expanded").set_value(False).run(timeout=20)
+            self.assertFalse(any(item.value == "诊断证据" for item in app.subheader))
+            self.assertEqual(report_reader.call_count, 1)
+        self.assertEqual(len(app.exception), 0)
+
+    def test_archive_distinguishes_record_sequence_and_resets_details_on_selection(self):
+        another_id = db.create_submission_with_questions(
+            "20260006", "界面测试同学", "另一次独立提交",
+            "使用数组首元素初始化。", "int main() { return 0; }",
+            "2026-09-10 09:00", QUESTIONS,
+        )
+        db.save_report(
+            another_id, {**db.get_report(self.submission_id), "overall": 81},
+            "2026-09-10 09:05",
+        )
+        app = self._start_app(student_id="20260006", name="界面测试同学")
+        next(button for button in app.button if button.label == "学习档案").click().run(timeout=20)
+        self.assertEqual(next(item for item in app.metric if item.label == "累计答辩记录").value, "2")
+        selector = next(item for item in app.selectbox if item.key == "archive_report_select")
+        options = selector.options
+        self.assertTrue(options[0].startswith(f"记录2 · 提交#{another_id}"))
+        self.assertTrue(options[1].startswith(f"记录1 · 提交#{self.submission_id}"))
+        self.assertTrue(all("第1轮" in label for label in options))
+        table = next(item.value for item in app.markdown if "<th>记录序号</th>" in item.value)
+        self.assertIn("<th>答辩轮次</th>", table)
+        self.assertEqual(table.count("第1轮"), 2)
+        next(item for item in app.toggle if item.key == "archive_report_expanded").set_value(True).run(timeout=20)
+        next(item for item in app.selectbox if item.key == "archive_report_select").set_value(options[1]).run(timeout=20)
+        self.assertFalse(app.session_state["archive_report_expanded"])
+        self.assertFalse(any(item.value == "诊断证据" for item in app.subheader))
+        next(item for item in app.toggle if item.key == "archive_report_expanded").set_value(True).run(timeout=20)
+        self.assertTrue(any(item.value == "诊断证据" for item in app.subheader))
+        self.assertEqual(len(app.exception), 0)
+
     def test_student_can_start_teacher_requested_redefense(self):
         db.save_teacher_review(
             self.submission_id,
@@ -1056,12 +1113,16 @@ class AppFlowTests(unittest.TestCase):
     def test_teacher_task_jumps_to_matching_submission(self):
         app = self._open_teacher_dashboard()
         review_button = next(
-            button for button in app.button if button.label == "前往复核"
+            button for button in app.button if button.label == "开始复核"
         )
         review_button.click().run(timeout=20)
         self.assertTrue(
-            any("已从待办定位到提交" in item.value for item in app.info)
+            any(item.value == "完成教师复核" for item in app.subheader)
         )
+        self.assertEqual(app.session_state["teacher_active_task"]["submission_id"], self.submission_id)
+        self.assertFalse(any(item.label == "筛选学生状态" for item in app.selectbox))
+        heads = [item.value for item in app.subheader]
+        self.assertLess(heads.index("完成教师复核"), heads.index("教师诊断摘要"))
         self.assertIsNone(app.session_state["teacher_task_submission_id"])
         self.assertIsNone(app.session_state["teacher_task_feedback_id"])
         self.assertIsNone(app.session_state["teacher_task_assignment_id"])
@@ -1089,6 +1150,92 @@ class AppFlowTests(unittest.TestCase):
         self.assertTrue(feedback["student_viewed_at"])
         self.assertTrue(any("学生理解度报告" in item.value for item in app.title))
         self.assertEqual(len(app.exception), 0)
+
+    def test_teacher_feedback_task_opens_exact_form_before_diagnosis(self):
+        another_feedback = db.save_student_feedback(
+            self.submission_id, "补充答辩说明", "补充：我考虑了空数组。", False, "2026-09-10 10:00",
+        )
+        app = self._open_teacher_dashboard()
+        next(button for button in app.button if button.key ==
+             f"task_action_教师待办_teacher-feedback-{self.feedback_id}").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        heads = [item.value for item in app.subheader]
+        self.assertLess(heads.index("处理学生反馈"), heads.index("教师诊断摘要"))
+        self.assertFalse(any(item.label == "筛选学生状态" for item in app.selectbox))
+        feedback_panels = [item for item in app.expander if item.label.startswith("反馈#")]
+        self.assertEqual(len(feedback_panels), 1)
+        self.assertTrue(feedback_panels[0].label.startswith(f"反馈#{self.feedback_id} ·"))
+        self.assertTrue(feedback_panels[0].proto.expanded)
+        self.assertFalse(next(item for item in app.expander
+                              if item.label == "查看本次诊断与答辩依据").proto.expanded)
+        next(item for item in app.text_area if item.label.startswith("教师回复")).set_value("请练习全负数输入。")
+        next(button for button in app.button if button.label == "保存反馈处理结果").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        feedbacks = {item["id"]: item for item in db.list_student_feedbacks(submission_id=self.submission_id)}
+        self.assertEqual(feedbacks[self.feedback_id]["teacher_reply"], "请练习全负数输入。")
+        self.assertEqual(feedbacks[another_feedback]["status"], "待处理")
+        self.assertEqual(app.session_state["teacher_active_task"]["feedback_id"], self.feedback_id)
+        self.assertTrue(any("本项待办已处理" in item.value for item in app.success))
+
+    def test_return_from_teacher_task_restores_filter_and_selection_without_saving(self):
+        app = self._open_teacher_dashboard()
+        next(item for item in app.selectbox if item.label == "筛选学生状态").set_value("有学生反馈").run(timeout=20)
+        selected = next(item for item in app.selectbox if item.label == "选择要处理的提交").value
+        next(button for button in app.button if button.label == "回复反馈").click().run(timeout=20)
+        next(item for item in app.text_area if item.label.startswith("教师回复")).set_value("尚未保存的回复")
+        next(button for button in app.button if button.label == "返回待办").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertIsNone(app.session_state["teacher_active_task"])
+        self.assertEqual(next(item for item in app.selectbox if item.label == "筛选学生状态").value, "有学生反馈")
+        self.assertEqual(next(item for item in app.selectbox if item.label == "选择要处理的提交").value, selected)
+        feedback = db.list_student_feedbacks(submission_id=self.submission_id)[0]
+        self.assertEqual(feedback["status"], "待处理")
+        self.assertEqual(feedback["teacher_reply"], "")
+
+    def test_next_task_preserves_pending_work_and_updates_after_save(self):
+        app = self._open_teacher_dashboard()
+        next(button for button in app.button if button.label == "回复反馈").click().run(timeout=20)
+        next(button for button in app.button if button.label == "处理下一项").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.session_state["teacher_active_task"]["action"], "review_submission")
+        self.assertEqual(db.list_student_feedbacks(submission_id=self.submission_id)[0]["status"], "待处理")
+        self.assertIsNone(db.get_teacher_review(self.submission_id))
+        next(button for button in app.button if button.label == "保存教师复核").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        next(button for button in app.button if button.label == "处理下一项").click().run(timeout=20)
+        self.assertEqual(app.session_state["teacher_active_task"]["feedback_id"], self.feedback_id)
+        next(item for item in app.text_area if item.label.startswith("教师回复")).set_value("请练习空数组和全负数。")
+        next(button for button in app.button if button.label == "保存反馈处理结果").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(db.list_teacher_tasks(), [])
+        self.assertTrue(next(button for button in app.button if button.label == "处理下一项").disabled)
+
+    def test_student_reply_task_shows_reply_first_and_can_return_or_open_report(self):
+        db.process_student_feedback(self.feedback_id, "任课教师", "已回复", "请练习全负数输入。", "2026-09-10 10:00")
+        app = self._open_task_center()
+        next(button for button in app.button if button.label == "查看教师回复").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertTrue(any(item.value == "教师回复" for item in app.subheader))
+        self.assertTrue(any("请练习全负数输入。" in item.value for item in app.markdown))
+        self.assertFalse(any(item.value == "诊断证据" for item in app.subheader))
+        next(button for button in app.button if button.label == "查看完整报告").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertTrue(any(item.value == "诊断证据" for item in app.subheader))
+        self.assertIsNone(app.session_state["student_task_feedback_id"])
+
+    def test_leaving_teacher_task_via_sidebar_clears_focus(self):
+        app = self._open_teacher_dashboard()
+        next(button for button in app.button if button.label == "开始复核").click().run(timeout=20)
+        next(button for button in app.button if button.label.startswith("教师工作台")).click().run(timeout=20)
+        self.assertIsNone(app.session_state["teacher_active_task"])
+        self.assertTrue(any(item.label == "筛选学生状态" for item in app.selectbox))
+        next(button for button in app.button if button.label == "开始复核").click().run(timeout=20)
+        next(button for button in app.button if button.label == "首页").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertIsNone(app.session_state["teacher_active_task"])
+        next(button for button in app.button if button.label.startswith("教师工作台")).click().run(timeout=20)
+        self.assertTrue(any(item.label == "筛选学生状态" for item in app.selectbox))
+        self.assertIsNone(db.get_teacher_review(self.submission_id))
 
     def test_unavailable_execution_environment_is_not_shown_as_student_error(self):
         app_path = Path(__file__).resolve().parents[1] / "app.py"
@@ -1141,7 +1288,7 @@ class AppFlowTests(unittest.TestCase):
             item
             for item in app.checkbox
             if item.label == "启用C++编译与隐藏测试样例验证"
-            and item.key is None
+            and item.key == "create_assignment_verification"
         ).check()
         for index in range(8):
             next(
@@ -1157,14 +1304,14 @@ class AppFlowTests(unittest.TestCase):
         next(
             item
             for item in app.text_area
-            if item.label == "教师参考答案（仅教师可见）" and item.key is None
+            if item.key == "create_assignment_reference_code"
         ).set_value("int main() { return 0; }")
         app.run(timeout=20)
         next(
             item
             for item in app.checkbox
             if item.label == "我已逐项核对，确认这些评分点确实适用于当前实验"
-            and item.key is None
+            and item.key == "create_assignment_quality_confirmed"
         ).check()
         with patch.object(
             verifier,
@@ -1179,12 +1326,207 @@ class AppFlowTests(unittest.TestCase):
             item for item in db.list_assignments() if item["title"] == "八组多行测试"
         )
         self.assertEqual(len(saved["test_cases"]), 8)
-        self.assertEqual(sum(item["weight"] for item in saved["test_cases"]), 100)
+        self.assertTrue(all(item.get("count_only") for item in saved["test_cases"]))
+        self.assertFalse(any(item.label == "分值（可留空）" for item in app.number_input))
         self.assertEqual(saved["test_cases"][0]["name"], "测试1")
         self.assertEqual(saved["test_cases"][0]["input"], "3\n0 1 2\n")
         self.assertTrue(saved["rubric_reviewed"])
         self.assertTrue(saved["reference_code"])
         self.assertEqual(len(app.exception), 0)
+
+    def _open_experiment_editor(self):
+        app = self._start_app(role="教师")
+        next(button for button in app.button if button.label == "实验管理").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        return app
+
+    def _selection_draft(self):
+        path = Path(__file__).resolve().parents[1] / "test_materials/selection_sort/experiment_config.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_teacher_draft_restores_all_materials_in_a_fresh_session(self):
+        config = self._selection_draft()
+        assignment_drafts.save_draft(db.DB_PATH, config)
+        app = self._open_experiment_editor()
+        self.assertEqual(app.text_input(key="create_assignment_title").value, config["title"])
+        self.assertEqual(app.text_area(key="create_assignment_test_cases_7_input").value, config["test_cases"][7]["input"])
+        self.assertEqual(app.session_state["create_rubric_seed"], config["rubric"])
+        self.assertTrue(app.checkbox(key="create_assignment_verification").value)
+        app.text_area(key="create_assignment_description").set_value("教师补充的描述\n保留下一行")
+        next(button for button in app.button if button.label == "保存草稿").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        restored = self._open_experiment_editor()
+        self.assertEqual(restored.text_area(key="create_assignment_description").value, "教师补充的描述\n保留下一行")
+        self.assertEqual(restored.text_area(key="create_assignment_reference_code").value, config["reference_code"])
+        self.assertEqual(restored.text_area(key="create_assignment_public_samples_1_input").value, config["public_samples"][1]["input"])
+        self.assertEqual(len(db.list_assignments()), 1)
+
+    def test_failed_preflight_saves_draft_before_restart_without_publishing(self):
+        config = self._selection_draft()
+        assignment_drafts.save_draft(db.DB_PATH, config)
+        app = self._open_experiment_editor()
+        app.text_input(key="create_assignment_title").set_value("教师改过的选择排序")
+        with patch.object(verifier, "verify_cpp_code", return_value=ENVIRONMENT_UNAVAILABLE):
+            next(button for button in app.button if button.label == "发布实验").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(len(db.list_assignments()), 1)
+        self.assertTrue(any("草稿" in item.value for item in app.info))
+        restored = self._open_experiment_editor()
+        self.assertEqual(restored.text_input(key="create_assignment_title").value, "教师改过的选择排序")
+        self.assertEqual(restored.text_area(key="create_assignment_test_cases_7_output").value, config["test_cases"][7]["expected_output"])
+
+    def test_successful_publish_clears_draft_and_starts_a_blank_form(self):
+        config = self._selection_draft()
+        assignment_drafts.save_draft(db.DB_PATH, config)
+        app = self._open_experiment_editor()
+        with patch.object(verifier, "verify_cpp_code", return_value=VERIFICATION):
+            next(button for button in app.button if button.label == "发布实验").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(len(db.list_assignments()), 2)
+        self.assertIsNone(load_teacher_draft())
+        self.assertEqual(app.text_input(key="create_assignment_title").value, "")
+        self.assertEqual(app.text_area(key="create_assignment_reference_code").value, "")
+        self.assertEqual(app.text_area(key="create_assignment_test_cases_0_input").value, "")
+
+    def test_incomplete_form_can_be_saved_without_validation_or_model_calls(self):
+        app = self._open_experiment_editor()
+        existing_errors = [item.value for item in app.error]
+        app.text_area(key="create_assignment_description").set_value("还未填写完成")
+        with patch.object(verifier, "verify_cpp_code") as verify:
+            next(button for button in app.button if button.label == "保存草稿").click().run(timeout=20)
+        verify.assert_not_called()
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(len(db.list_assignments()), 1)
+        self.assertEqual(load_teacher_draft()["data"]["description"], "还未填写完成")
+        self.assertEqual([item.value for item in app.error], existing_errors)
+
+
+    def _open_student_submission(self, student_id="20260001"):
+        app = self._start_app(student_id=student_id)
+        next(button for button in app.button if button.label == "实验提交").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        return app
+
+    def test_student_draft_restores_in_fresh_session_and_is_private(self):
+        assignment = db.list_assignments()[0]
+        app = self._open_student_submission()
+        values = {"explanation": "选择最小元素\n保留重复值", "lab_report": "测试记录", "code": "int main(){\n  return 0;\n}", "custom_input": "3\n2  1 3\n"}
+        for field, value in values.items():
+            app.text_area(key=f"{field}_{assignment['id']}").set_value(value)
+        app.run(timeout=20)
+        restored = self._open_student_submission()
+        for field, value in values.items():
+            self.assertEqual(restored.text_area(key=f"{field}_{assignment['id']}").value, value)
+        self.assertTrue(any("已恢复系统保存" in item.value for item in restored.info))
+        self.assertFalse(any(button.label == "进入AI答辩" for button in restored.button))
+        other = self._open_student_submission("20260002")
+        self.assertEqual(other.text_area(key=f"explanation_{assignment['id']}").value, "")
+        self.assertEqual(len(db.list_submissions()), 1)
+
+    def test_old_formal_cache_requires_rejudging_under_new_policy(self):
+        with (patch.object(llm, "is_configured", return_value=True),
+              patch.object(verifier, "verify_cpp_code", return_value=VERIFICATION) as verify):
+            app = self._open_student_submission()
+            next(item for item in app.text_area if item.label.startswith("解题思路")).set_value("逐项比较求最大值。")
+            next(button for button in app.button if button.label == "正式评测代码").click().run(timeout=20)
+            result_key = str(db.list_assignments()[0]["id"])
+            cached = dict(app.session_state["formal_judge_results"])
+            cached[result_key].pop("policy_version")
+            app.session_state["formal_judge_results"] = cached
+            app.run(timeout=20)
+            self.assertFalse(any(button.label == "进入AI答辩" for button in app.button))
+            self.assertTrue(any("判题规则已经改变" in item.value for item in app.info))
+            self.assertEqual(verify.call_count, 1)
+            self.assertEqual(len(app.exception), 0)
+
+    def test_formal_judge_receives_public_and_hidden_cases(self):
+        assignment = db.list_assignments()[0]
+        with patch.object(verifier, "verify_cpp_code", return_value=PARTIAL_VERIFICATION) as verify:
+            app = self._open_student_submission()
+            next(item for item in app.text_area if item.label.startswith("解题思路")).set_value("逐项比较求最大值。")
+            next(button for button in app.button if button.label == "正式评测代码").click().run(timeout=20)
+        cases = verify.call_args.args[1]
+        self.assertEqual(len(cases), len(assignment["public_samples"]) + len(assignment["test_cases"]))
+        self.assertTrue(all(case["count_only"] for case in cases))
+        self.assertEqual(cases[0]["visibility"], "公开")
+        self.assertEqual(cases[-1]["visibility"], "隐藏")
+        self.assertFalse(any(button.label == "进入AI答辩" for button in app.button))
+
+    def test_changed_assignment_warns_and_corrupt_draft_is_preserved(self):
+        assignment = db.list_assignments()[0]
+        student_drafts.save_draft(db.DB_PATH, "20260001", assignment["id"], {"explanation": "保留思路"}, "old-version")
+        app = self._open_student_submission()
+        self.assertTrue(any("教师已更新实验" in item.value for item in app.warning))
+        self.assertTrue(any("重新评测" in item.value for item in app.warning))
+        self.assertEqual(app.text_area(key=f"explanation_{assignment['id']}").value, "保留思路")
+        path = student_drafts.draft_path(db.DB_PATH, "20260002", assignment["id"])
+        path.write_text("broken-json", encoding="utf-8")
+        other = self._open_student_submission("20260002")
+        self.assertTrue(any("系统草稿暂时无法恢复" in item.value for item in other.warning))
+        other.text_area(key=f"explanation_{assignment['id']}").set_value("新输入").run(timeout=20)
+        self.assertEqual(path.read_text(encoding="utf-8"), "broken-json")
+
+
+    def test_restore_changed_draft_without_verification_has_no_rejudge_requirement(self):
+        assignment = db.list_assignments()[0]
+        with db.get_connection() as connection:
+            connection.execute("UPDATE assignments SET verification_enabled = 0 WHERE id = ?", (assignment["id"],))
+        student_drafts.save_draft(db.DB_PATH, "20260001", assignment["id"], {"explanation": "保留思路"}, "old-version")
+        with patch.object(llm, "is_configured", return_value=True):
+            app = self._open_student_submission()
+        self.assertEqual(app.text_area(key=f"explanation_{assignment['id']}").value, "保留思路")
+        self.assertTrue(any("教师已更新实验" in item.value for item in app.warning))
+        self.assertFalse(any("重新评测" in item.value for item in list(app.warning) + list(app.info)))
+        self.assertTrue(any(button.label == "调用AI分析并开始答辩" for button in app.button))
+        self.assertFalse(any(button.label == "正式评测代码" for button in app.button))
+        self.assertEqual(len(app.exception), 0)
+
+    def test_teacher_publishes_one_hidden_case_and_restores_optional_choice(self):
+        config = self._selection_draft()
+        config["title"] = "选择排序：一组隐藏样例"
+        config["test_cases"] = config["test_cases"][:1]
+        config["explanation_required"] = False
+        assignment_drafts.save_draft(db.DB_PATH, config)
+        app = self._open_experiment_editor()
+        self.assertEqual(app.selectbox(key="create_assignment_explanation_required").value, "选做")
+        with patch.object(verifier, "verify_cpp_code", return_value=VERIFICATION):
+            next(button for button in app.button if button.label == "发布实验").click().run(timeout=20)
+        self.assertEqual(len(app.exception), 0)
+        saved = next(assignment for assignment in db.list_assignments() if assignment["title"] == config["title"])
+        self.assertEqual(len(saved["test_cases"]), 1)
+        self.assertFalse(saved["explanation_required"])
+
+    def test_teacher_optional_choice_allows_empty_student_explanation_and_reaches_ai(self):
+        assignment = db.list_assignments()[0]
+        teacher = self._open_experiment_editor()
+        teacher.selectbox(key=f"edit_assignment_explanation_required_{assignment['id']}").set_value("选做")
+        with patch.object(verifier, "verify_cpp_code", return_value=VERIFICATION):
+            next(button for button in teacher.button if button.label == "保存修改").click().run(timeout=20)
+        self.assertEqual(len(teacher.exception), 0)
+        self.assertFalse(db.get_assignment(assignment["id"])["explanation_required"])
+        with (patch.object(llm, "is_configured", return_value=True),
+              patch.object(verifier, "verify_cpp_code", return_value=VERIFICATION),
+              patch.object(llm, "preliminary_review", return_value={"completion_score": 100, "summary": "实现正确", "criteria": []}) as preliminary,
+              patch.object(llm, "generate_questions", return_value=QUESTIONS) as questions):
+            app = self._open_student_submission()
+            self.assertEqual(app.text_area(key=f"explanation_{assignment['id']}").label, "解题思路（选做）")
+            self.assertEqual(app.text_area(key=f"explanation_{assignment['id']}").value, "")
+            next(button for button in app.button if button.label == "正式评测代码").click().run(timeout=20)
+            next(button for button in app.button if button.label == "进入AI答辩").click().run(timeout=20)
+            self.assertFalse(preliminary.call_args.kwargs["explanation_required"])
+            self.assertFalse(questions.call_args.kwargs["explanation_required"])
+        saved = db.get_submission(db.list_submissions()[0]["id"])
+        self.assertEqual(saved["explanation"], "")
+        self.assertFalse(saved["assignment_snapshot"]["explanation_required"])
+        self.assertEqual(len(app.exception), 0)
+
+    def test_required_explanation_blocks_empty_submission_before_judge(self):
+        with patch.object(verifier, "verify_cpp_code") as verify:
+            app = self._open_student_submission()
+            next(button for button in app.button if button.label == "正式评测代码").click().run(timeout=20)
+        verify.assert_not_called()
+        self.assertTrue(any("解题思路为必做" in item.value for item in app.error))
+        self.assertEqual(len(db.list_submissions()), 1)
 
 
 if __name__ == "__main__":

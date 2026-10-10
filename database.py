@@ -7,12 +7,36 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+import runtime_config
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DB_PATH = BASE_DIR / "data" / "wuma_ai.db"
-DB_PATH = Path(os.getenv("WUMA_AI_DB_PATH", str(DEFAULT_DB_PATH)))
+DB_PATH = runtime_config.database_path()
+READ_ONLY = False
 
-MAX_TEST_INPUT_CHARS = 2_000_000
+# 旧表overall为NOT NULL。-1只作为内部未评分标记，所有读取入口还原为None。
+UNASSESSED_OVERALL = -1
+
+
+def _decode_evidence_report(record):
+    if record.get("overall") == UNASSESSED_OVERALL:
+        record["overall"] = None
+    if record.get("teacher_confirmed_overall") == UNASSESSED_OVERALL:
+        record["teacher_confirmed_overall"] = None
+    metadata = _load_json(record.pop("evidence_json", "{}"), {})
+    if isinstance(metadata, dict):
+        record.update(metadata)
+    return record
+
+
+def _decode_teacher_review(row):
+    record = dict(row)
+    if record.get("confirmed_overall") == UNASSESSED_OVERALL:
+        record["confirmed_overall"] = None
+    return record
+
+MAX_TEST_INPUT_CHARS = 200_000
 MAX_TEST_OUTPUT_CHARS = 2_000_000
 MAX_PUBLIC_SAMPLE_CHARS = 200_000
 
@@ -87,6 +111,7 @@ DEFAULT_ASSIGNMENT = {
     "starter_code": DEFAULT_STARTER_CODE,
     "reference_code": DEFAULT_STARTER_CODE,
     "rubric_reviewed": True,
+    "explanation_required": True,
     "language": "C++",
     "input_format": "第一行输入整数n，第二行输入n个整数。",
     "output_format": "输出数组中的最大值。",
@@ -233,7 +258,12 @@ STUDENT_FEEDBACK_STATUSES = {
 @contextmanager
 def get_connection():
     """创建连接并保证提交、回滚和关闭，兼容Windows文件锁。"""
-    connection = sqlite3.connect(DB_PATH)
+    if READ_ONLY:
+        connection = sqlite3.connect(
+            Path(DB_PATH).resolve().as_uri() + "?mode=ro", uri=True
+        )
+    else:
+        connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     try:
@@ -259,6 +289,7 @@ def _migrate_qa_table(connection):
         "initial_evaluation_json": "TEXT NOT NULL DEFAULT '{}'",
         "final_evaluation_json": "TEXT NOT NULL DEFAULT '{}'",
         "question_reason": "TEXT NOT NULL DEFAULT ''",
+        "reference_dimensions_json": "TEXT NOT NULL DEFAULT '[]'",
     }
 
     for column_name, definition in migrations.items():
@@ -274,6 +305,7 @@ def _migrate_report_table(connection):
     migrations = {
         "review_required": "INTEGER NOT NULL DEFAULT 0",
         "review_reasons_json": "TEXT NOT NULL DEFAULT '[]'",
+        "evidence_json": "TEXT NOT NULL DEFAULT '{}'",
     }
 
     for column_name, definition in migrations.items():
@@ -289,7 +321,7 @@ def _migrate_report_table(connection):
             review_required = 1,
             review_reasons_json = ?
         WHERE
-            overall < 70
+            overall >= 0 AND overall < 70
             AND review_required = 0
             AND review_reasons_json = '[]'
         """,
@@ -313,6 +345,7 @@ def _migrate_submission_table(connection):
         "lab_report": "TEXT NOT NULL DEFAULT ''",
         "rubric_snapshot_json": "TEXT NOT NULL DEFAULT '[]'",
         "code_verification_json": "TEXT NOT NULL DEFAULT '{}'",
+        "request_token": "TEXT",
     }
 
     for column_name, definition in migrations.items():
@@ -320,12 +353,21 @@ def _migrate_submission_table(connection):
             connection.execute(
                 f"ALTER TABLE submissions ADD COLUMN {column_name} {definition}"
             )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_submission_request_token "
+        "ON submissions(request_token) WHERE request_token IS NOT NULL"
+    )
 
 
 def _migrate_assignment_table(connection):
     """为旧实验任务补充评分点，并为历史任务提供可用的默认标尺。"""
     columns = _column_names(connection, "assignments")
     test_cases_column_added = "test_cases_json" not in columns
+    if "explanation_required" not in columns:
+        connection.execute(
+            "ALTER TABLE assignments ADD COLUMN explanation_required "
+            "INTEGER NOT NULL DEFAULT 1"
+        )
     if "rubric_json" not in columns:
         connection.execute(
             "ALTER TABLE assignments ADD COLUMN rubric_json "
@@ -449,6 +491,12 @@ def _migrate_assignment_table(connection):
         )
 
 
+def _migrate_teacher_review_table(connection):
+    """补充复核所覆盖的反馈编号；旧复核保持原样，由读取逻辑兼容。"""
+    if "feedback_cutoff_id" not in _column_names(connection, "teacher_reviews"):
+        connection.execute("ALTER TABLE teacher_reviews ADD COLUMN feedback_cutoff_id INTEGER")
+
+
 def _migrate_student_feedback_table(connection):
     """为旧反馈表补充学生查看教师回复的时间。"""
     columns = _column_names(connection, "student_feedbacks")
@@ -541,6 +589,7 @@ def init_db():
                 teaching_focus_json TEXT NOT NULL DEFAULT '[]',
                 rubric_json TEXT NOT NULL DEFAULT '[]',
                 starter_code TEXT NOT NULL DEFAULT '',
+                explanation_required INTEGER NOT NULL DEFAULT 1,
                 input_format TEXT NOT NULL DEFAULT '',
                 output_format TEXT NOT NULL DEFAULT '',
                 constraints_text TEXT NOT NULL DEFAULT '',
@@ -597,6 +646,7 @@ def init_db():
                 initial_evaluation_json TEXT NOT NULL DEFAULT '{}',
                 final_evaluation_json TEXT NOT NULL DEFAULT '{}',
                 question_reason TEXT NOT NULL DEFAULT '',
+                reference_dimensions_json TEXT NOT NULL DEFAULT '[]',
                 UNIQUE(submission_id, question_index),
                 FOREIGN KEY(submission_id)
                     REFERENCES submissions(id)
@@ -614,6 +664,7 @@ def init_db():
                 dimensions_json TEXT NOT NULL,
                 review_required INTEGER NOT NULL DEFAULT 0,
                 review_reasons_json TEXT NOT NULL DEFAULT '[]',
+                evidence_json TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(submission_id)
                     REFERENCES submissions(id)
@@ -640,6 +691,7 @@ def init_db():
                 confirmed_overall INTEGER NOT NULL,
                 comment TEXT NOT NULL,
                 reviewed_at TEXT NOT NULL,
+                feedback_cutoff_id INTEGER,
                 FOREIGN KEY(submission_id)
                     REFERENCES submissions(id)
                     ON DELETE CASCADE
@@ -734,6 +786,7 @@ def init_db():
         _migrate_report_table(connection)
         _migrate_submission_table(connection)
         _migrate_student_feedback_table(connection)
+        _migrate_teacher_review_table(connection)
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_submissions_assignment_id
@@ -765,6 +818,7 @@ def _decode_assignment(row):
         assignment.get("verification_enabled", 0)
     )
     assignment["rubric_reviewed"] = bool(assignment.get("rubric_reviewed", 0))
+    assignment["explanation_required"] = bool(assignment.get("explanation_required", 1))
     assignment["test_cases"] = _load_json(
         assignment.pop("test_cases_json", "[]"),
         [],
@@ -923,13 +977,20 @@ def normalize_test_cases(test_cases):
     names = set()
     missing_weight_indices = []
     explicit_weight_total = 0
+    count_only = all(isinstance(case, dict) and case.get("count_only") for case in test_cases)
+    if not count_only and any(isinstance(case, dict) and case.get("count_only") for case in test_cases):
+        raise ValueError("同一实验不能混用计分与仅判通过的测试点。")
     for index, raw in enumerate(test_cases, start=1):
         if not isinstance(raw, dict):
             raise ValueError(f"第{index}组测试样例格式不正确。")
         name = str(raw.get("name", "")).strip()[:80]
         group = str(raw.get("group", "")).strip()[:40] or "基础功能"
-        case_input = str(raw.get("input", ""))[:MAX_TEST_INPUT_CHARS]
-        expected_output = str(raw.get("expected_output", ""))[:MAX_TEST_OUTPUT_CHARS]
+        case_input = str(raw.get("input", ""))
+        expected_output = str(raw.get("expected_output", ""))
+        if len(case_input) > MAX_TEST_INPUT_CHARS:
+            raise ValueError(f"第{index}组测试输入超过{MAX_TEST_INPUT_CHARS:,}个字符，请缩小样例；不会截断保存。")
+        if len(expected_output) > MAX_TEST_OUTPUT_CHARS:
+            raise ValueError(f"第{index}组预期输出超过{MAX_TEST_OUTPUT_CHARS:,}个字符，请缩小样例；不会截断保存。")
         if not name:
             raise ValueError(f"第{index}组测试样例名称不能为空。")
         if name in names:
@@ -937,7 +998,9 @@ def normalize_test_cases(test_cases):
         if not expected_output.strip():
             raise ValueError(f"测试样例“{name}”的预期输出不能为空。")
         raw_weight = raw.get("weight")
-        if raw_weight is None or str(raw_weight).strip() == "":
+        if count_only:
+            weight = 0
+        elif raw_weight is None or str(raw_weight).strip() == "":
             weight = None
             missing_weight_indices.append(len(normalized))
         else:
@@ -961,6 +1024,11 @@ def normalize_test_cases(test_cases):
             }
         )
         names.add(name)
+
+    if count_only:
+        for item in normalized:
+            item["count_only"] = True
+        return normalized
 
     if missing_weight_indices:
         remaining = 100 - explicit_weight_total
@@ -1079,6 +1147,7 @@ def create_assignment(
     defense_score_threshold=100,
     reference_code="",
     rubric_reviewed=False,
+    explanation_required=True,
 ):
     """教师创建并直接发布一个新实验任务。"""
     rubric = normalize_rubric(rubric or DEFAULT_RUBRIC)
@@ -1139,6 +1208,12 @@ def create_assignment(
                 now,
             ),
         )
+        connection.execute(
+            "UPDATE assignments SET explanation_required = ? WHERE id = ?",
+            (int(bool(explanation_required)), cursor.lastrowid),
+        )
+        import access_control
+        access_control.attach_assignment(connection, cursor.lastrowid)
         return cursor.lastrowid
 
 
@@ -1163,6 +1238,7 @@ def update_assignment(
     defense_score_threshold=100,
     reference_code="",
     rubric_reviewed=False,
+    explanation_required=None,
 ):
     """修改任务内容；已有提交仍保留提交时快照。"""
     rubric = normalize_rubric(rubric or DEFAULT_RUBRIC)
@@ -1236,6 +1312,13 @@ def update_assignment(
         )
 
 
+        if explanation_required is not None:
+            connection.execute(
+                "UPDATE assignments SET explanation_required = ? WHERE id = ?",
+                (int(bool(explanation_required)), assignment_id),
+            )
+
+
 def set_assignment_status(assignment_id, status):
     """发布或停用实验；停用不会删除历史提交。"""
     if status not in {"已发布", "已停用"}:
@@ -1273,6 +1356,7 @@ def _assignment_snapshot(assignment):
         "test_cases": assignment.get("test_cases", []),
         "hint_limit": normalize_hint_limit(assignment.get("hint_limit", 2)),
         "rubric_reviewed": bool(assignment.get("rubric_reviewed", False)),
+        "explanation_required": bool(assignment.get("explanation_required", True)),
         "defense_admission": normalize_defense_policy(
             assignment.get("defense_admission", "全部通过"),
             assignment.get("defense_score_threshold", 100),
@@ -1391,6 +1475,7 @@ def create_submission_with_questions(
     lab_report="",
     preliminary_review=None,
     code_verification=None,
+    request_token=None,
 ):
     """在同一个事务中保存提交和3道AI问题。"""
     submission_sql = """
@@ -1398,20 +1483,29 @@ def create_submission_with_questions(
             assignment_id, student_id, name, problem,
             explanation, code, submitted_at, status,
             assignment_snapshot_json, lab_report, rubric_snapshot_json,
-            code_verification_json
+            code_verification_json, request_token
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, '答辩中', ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, '答辩中', ?, ?, ?, ?, ?)
     """
 
     question_sql = """
         INSERT INTO qa_records (
             submission_id, question_index, dimension,
-            question, reference_points_json, question_reason
+            question, reference_points_json, question_reason, reference_dimensions_json
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """
 
     with get_connection() as connection:
+        if request_token:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT id, student_id, code FROM submissions WHERE request_token = ?", (request_token,),
+            ).fetchone()
+            if existing:
+                if existing["student_id"] != student_id or existing["code"] != code:
+                    raise ValueError("提交重试标识与当前内容不一致。")
+                return existing["id"]
         cursor = connection.execute(
             submission_sql,
             (
@@ -1432,6 +1526,7 @@ def create_submission_with_questions(
                     ensure_ascii=False,
                 ),
                 json.dumps(code_verification or {}, ensure_ascii=False),
+                request_token,
             ),
         )
         submission_id = cursor.lastrowid
@@ -1446,6 +1541,7 @@ def create_submission_with_questions(
                     question["question"],
                     json.dumps(question["reference_points"], ensure_ascii=False),
                     str(question.get("reason", "")).strip()[:300],
+                    json.dumps(question.get("reference_dimensions", []), ensure_ascii=False),
                 )
             )
         connection.executemany(question_sql, rows)
@@ -1577,6 +1673,11 @@ def save_report(submission_id, report, created_at):
         report.get("review_reasons", []),
         ensure_ascii=False,
     )
+    evidence_json = json.dumps({
+        key: report[key] for key in (
+            "score_version", "assessment_complete", "assessed_dimensions", "dimension_evidence",
+        ) if key in report
+    }, ensure_ascii=False)
 
     with get_connection() as connection:
         connection.execute(
@@ -1584,9 +1685,9 @@ def save_report(submission_id, report, created_at):
             INSERT INTO reports (
                 submission_id, overall, level, weakest,
                 summary, suggestion, dimensions_json,
-                review_required, review_reasons_json, created_at
+                review_required, review_reasons_json, created_at, evidence_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(submission_id) DO UPDATE SET
                 overall = excluded.overall,
                 level = excluded.level,
@@ -1596,11 +1697,12 @@ def save_report(submission_id, report, created_at):
                 dimensions_json = excluded.dimensions_json,
                 review_required = excluded.review_required,
                 review_reasons_json = excluded.review_reasons_json,
-                created_at = excluded.created_at
+                created_at = excluded.created_at,
+                evidence_json = excluded.evidence_json
             """,
             (
                 submission_id,
-                report["overall"],
+                report["overall"] if report["overall"] is not None else UNASSESSED_OVERALL,
                 report["level"],
                 report["weakest"],
                 report["summary"],
@@ -1609,6 +1711,7 @@ def save_report(submission_id, report, created_at):
                 int(report.get("review_required", False)),
                 review_reasons_json,
                 created_at,
+                evidence_json,
             ),
         )
         connection.execute(
@@ -1642,12 +1745,15 @@ def save_teacher_review(
         raise ValueError("请填写复核教师姓名。")
     if decision not in TEACHER_REVIEW_DECISIONS:
         raise ValueError("教师复核结论不在允许范围内。")
-    try:
-        confirmed_overall = round(float(confirmed_overall))
-    except (TypeError, ValueError) as error:
-        raise ValueError("教师确认理解度必须是0至100的数字。") from error
-    if not 0 <= confirmed_overall <= 100:
-        raise ValueError("教师确认理解度必须在0至100之间。")
+    if confirmed_overall is None and decision == "要求学生重新答辩":
+        confirmed_overall = UNASSESSED_OVERALL
+    else:
+        try:
+            confirmed_overall = round(float(confirmed_overall))
+        except (TypeError, ValueError) as error:
+            raise ValueError("教师确认理解度必须是0至100的数字。") from error
+        if not 0 <= confirmed_overall <= 100:
+            raise ValueError("教师确认理解度必须在0至100之间。")
     reviewed_at = reviewed_at or datetime.now().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         report = connection.execute(
@@ -1657,15 +1763,23 @@ def save_teacher_review(
         if report is None:
             raise ValueError("该提交尚未生成AI报告，不能进行教师复核。")
         if decision == "认可AI诊断":
+            if report["overall"] == UNASSESSED_OVERALL:
+                raise ValueError("AI评价尚不完整，不能自动认可总分；请核查后调整理解度结论或要求重新答辩。")
             confirmed_overall = report["overall"]
 
+        # 在同一写事务中记录本次复核覆盖的反馈，后续新疑问仍会触发复核。
+        connection.execute("BEGIN IMMEDIATE")
+        feedback_cutoff_id = connection.execute(
+            "SELECT COALESCE(MAX(id), 0) FROM student_feedbacks WHERE submission_id = ?",
+            (submission_id,),
+        ).fetchone()[0]
         cursor = connection.execute(
             """
             INSERT INTO teacher_reviews (
                 submission_id, reviewer_name, decision,
-                confirmed_overall, comment, reviewed_at
+                confirmed_overall, comment, reviewed_at, feedback_cutoff_id
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 submission_id,
@@ -1674,6 +1788,7 @@ def save_teacher_review(
                 confirmed_overall,
                 comment[:1000],
                 reviewed_at,
+                feedback_cutoff_id,
             ),
         )
         teacher_review_id = cursor.lastrowid
@@ -1719,7 +1834,7 @@ def get_teacher_review(submission_id):
             """,
             (submission_id,),
         ).fetchone()
-    return dict(row) if row else None
+    return _decode_teacher_review(row) if row else None
 
 
 def list_teacher_review_history(submission_id):
@@ -1734,7 +1849,7 @@ def list_teacher_review_history(submission_id):
             """,
             (submission_id,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    return [_decode_teacher_review(row) for row in rows]
 
 
 def get_latest_redefense_request(submission_id):
@@ -1822,9 +1937,9 @@ def start_redefense(request_id, questions, started_at=None):
             """
             INSERT INTO qa_records (
                 submission_id, question_index, dimension,
-                question, reference_points_json, question_reason
+                question, reference_points_json, question_reason, reference_dimensions_json
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -1834,6 +1949,7 @@ def start_redefense(request_id, questions, started_at=None):
                     question["question"],
                     json.dumps(question["reference_points"], ensure_ascii=False),
                     str(question.get("reason", "")).strip()[:300],
+                    json.dumps(question.get("reference_dimensions", []), ensure_ascii=False),
                 )
                 for index, question in enumerate(questions)
             ],
@@ -2070,6 +2186,19 @@ def list_student_feedbacks(
     return records
 
 
+# 旧版本仅记录到分钟，同一分钟的先后无法证明，保守保留为待核查。
+# 新复核使用反馈编号快照，避免同一分钟的新疑问被旧复核误判为已处理。
+_PENDING_AI_DISPUTE_COUNT_SQL = """
+    (SELECT COUNT(*) FROM student_feedbacks AS dispute
+     WHERE dispute.submission_id = s.id
+       AND dispute.category = '对AI结果有疑问'
+       AND ((tr.feedback_cutoff_id IS NOT NULL AND dispute.id > tr.feedback_cutoff_id)
+            OR (tr.feedback_cutoff_id IS NULL
+                AND (tr.id IS NULL OR dispute.created_at >= tr.reviewed_at)))
+    ) AS pending_ai_dispute_count
+"""
+
+
 def list_submissions(assignment_id=None, student_id=None, submission_id=None):
     """读取提交摘要，并可按实验、学号或提交编号筛选。"""
     sql = """
@@ -2087,6 +2216,7 @@ def list_submissions(assignment_id=None, student_id=None, submission_id=None):
             s.assignment_snapshot_json,
             s.code_verification_json,
             r.overall,
+            r.evidence_json,
             r.level,
             r.weakest,
             pr.completion_score,
@@ -2108,7 +2238,8 @@ def list_submissions(assignment_id=None, student_id=None, submission_id=None):
                 SELECT COUNT(*)
                 FROM student_feedbacks AS sf
                 WHERE sf.submission_id = s.id AND sf.status = '待处理'
-            ) AS pending_feedback_count
+            ) AS pending_feedback_count,
+            __PENDING_AI_DISPUTE_COUNT__
         FROM submissions AS s
         LEFT JOIN assignments AS a ON a.id = s.assignment_id
         LEFT JOIN reports AS r ON r.submission_id = s.id
@@ -2143,11 +2274,16 @@ def list_submissions(assignment_id=None, student_id=None, submission_id=None):
         sql += " WHERE " + " AND ".join(conditions)
     sql += " ORDER BY s.id DESC"
 
+    sql = sql.replace("__PENDING_AI_DISPUTE_COUNT__", _PENDING_AI_DISPUTE_COUNT_SQL)
     with get_connection() as connection:
+        if "feedback_cutoff_id" not in _column_names(connection, "teacher_reviews"):
+            sql = sql.replace("tr.feedback_cutoff_id", "NULL")
+        if "evidence_json" not in _column_names(connection, "reports"):
+            sql = sql.replace("r.evidence_json", "'{}' AS evidence_json")
         rows = connection.execute(sql, tuple(parameters)).fetchall()
     records = []
     for row in rows:
-        record = dict(row)
+        record = _decode_evidence_report(dict(row))
         record["review_required"] = bool(record.get("review_required", 0))
         record["teacher_reviewed"] = bool(record.get("teacher_reviewed", 0))
         record["assignment_snapshot"] = _load_json(
@@ -2176,6 +2312,7 @@ def list_learning_records(assignment_id=None, student_id=None):
             COALESCE(a.title, s.problem) AS assignment_title,
             s.submitted_at,
             r.overall,
+            r.evidence_json,
             r.level,
             r.weakest,
             r.summary,
@@ -2204,7 +2341,8 @@ def list_learning_records(assignment_id=None, student_id=None):
                 SELECT COUNT(*)
                 FROM student_feedbacks AS sf
                 WHERE sf.submission_id = s.id AND sf.status = '待处理'
-            ) AS pending_feedback_count
+            ) AS pending_feedback_count,
+            __PENDING_AI_DISPUTE_COUNT__
         FROM submissions AS s
         LEFT JOIN assignments AS a ON a.id = s.assignment_id
         INNER JOIN reports AS r ON r.submission_id = s.id
@@ -2236,12 +2374,17 @@ def list_learning_records(assignment_id=None, student_id=None):
         sql += " WHERE " + " AND ".join(conditions)
     sql += " ORDER BY s.id ASC"
 
+    sql = sql.replace("__PENDING_AI_DISPUTE_COUNT__", _PENDING_AI_DISPUTE_COUNT_SQL)
     with get_connection() as connection:
+        if "feedback_cutoff_id" not in _column_names(connection, "teacher_reviews"):
+            sql = sql.replace("tr.feedback_cutoff_id", "NULL")
+        if "evidence_json" not in _column_names(connection, "reports"):
+            sql = sql.replace("r.evidence_json", "'{}' AS evidence_json")
         rows = connection.execute(sql, tuple(parameters)).fetchall()
 
     records = []
     for row in rows:
-        record = dict(row)
+        record = _decode_evidence_report(dict(row))
         record["dimensions"] = _load_json(
             record.pop("dimensions_json"),
             {},
@@ -2309,6 +2452,7 @@ def get_qa_records(submission_id):
             record.pop("reference_points_json"),
             [],
         )
+        record["reference_dimensions"] = _load_json(record.pop("reference_dimensions_json", "[]"), [])
         record["initial_evaluation"] = _load_json(
             record.pop("initial_evaluation_json"),
             {},
@@ -2332,7 +2476,7 @@ def get_report(submission_id):
     if row is None:
         return None
 
-    report = dict(row)
+    report = _decode_evidence_report(dict(row))
     report["dimensions"] = _load_json(report.pop("dimensions_json"), {})
     report["review_required"] = bool(report.get("review_required", 0))
     report["review_reasons"] = _load_json(
@@ -2343,6 +2487,10 @@ def get_report(submission_id):
     report["student_feedbacks"] = list_student_feedbacks(
         submission_id=submission_id
     )
+    import teacher_insights as insights
+    report["pending_ai_dispute_count"] = len(insights.pending_ai_disputes(
+        report["student_feedbacks"], report["teacher_review"],
+    ))
     return report
 
 
@@ -2472,14 +2620,15 @@ def list_teacher_tasks(assignment_id=None, include_completed=False):
                 {
                     "task_key": f"teacher-review-{record['id']}",
                     "task_type": "人工复核",
-                    "title": "复核重新答辩结果" if is_redefense else "复核AI诊断",
+                    "title": ("复核学生对AI结果的疑问" if record.get("pending_ai_dispute_count")
+                              else "复核重新答辩结果" if is_redefense else "复核AI诊断"),
                     "description": (
                         f"{record['name']} · {record['student_id']} · "
-                        f"{record['assignment_title']}"
+                        f"{record['assignment_title']} · {review_state['原因']}"
                     ),
                     "priority": (
                         "紧急"
-                        if is_redefense
+                        if is_redefense or record.get("pending_ai_dispute_count")
                         or (
                             record.get("overall") is not None
                             and record["overall"] < 70
@@ -2570,3 +2719,9 @@ def list_teacher_tasks(assignment_id=None, include_completed=False):
             }
         )
     return _sort_tasks(tasks)
+
+
+# Install authorization after all entry points have been defined.
+import access_control as _access_control
+if hasattr(_access_control, "install"):
+    _access_control.install()

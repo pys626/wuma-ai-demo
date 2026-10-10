@@ -1,0 +1,31 @@
+{
+  "case": "Correction of review briefing based on prior results after explicit user feedback",
+  "evidence_type": "User-provided screenshot of LearnBuddy's correction; underlying raw tool panels are not shown in this screenshot",
+  "screenshot": "D:/AI_Coding/wuma_ai_v1_3_16/output/LearnBuddy协作_20261010/evidence/03_复核简报修正_20261010.png",
+  "screenshot_sha256": "84e07fc26dd4f951e6929d46fd25bc6a024ff68a5f401a9494072f5e6787bf5e",
+  "source_pixels": [
+    1378,
+    2324
+  ],
+  "platform": "LearnBuddy",
+  "displayed_model": "GLM-5.3",
+  "displayed_elapsed": "2m11s",
+  "displayed_message_time": "13:45",
+  "visible_new_wuma_queries": 0,
+  "visible_private_memory_edit": "LearnBuddy private memory file 2026-10-10.md, +2 -0; this is not evidence of an application database change",
+  "corrections_observed": [
+    "Removed unsupported claim that submission 5's detailed status was unchanged since the empty-queue query at 12:48:45.",
+    "Restricted the comparison to both observed task queues being empty.",
+    "Cited reported teacher-confirmed score path 教师复核.确认理解度 = 100 and stated that it appears in diagnosis only.",
+    "Attributed the one-record claim to the progress response's 提交记录 array.",
+    "Replaced 'no need to check re-defense records' with missing status and inability to determine."
+  ],
+  "remaining_limits": [
+    "Field-path attribution is visible in LearnBuddy's response, but the original diagnosis score field and complete progress array remain not independently visible in the supplied screenshots.",
+    "Phrase as 'one submission returned in this query' unless complete historical coverage is established.",
+    "The transcribed briefing contains 592 non-whitespace characters, including 387 Han characters; the meaning of the 500字 limit is ambiguous. It should be shortened for presentation use.",
+    "This demonstrates correction following explicit human feedback, not autonomous discovery of its original error.",
+    "Empty-queue run used Kimi-K3; diagnosis/progress and correction used GLM-5.3. Do not present this as one model's full three-round validation."
+  ],
+  "transcribed_brief": "修正后的提交#5复核简报（依据13:27两轮工具返回，无新查询）\n一、本轮事实（13:27:21诊断 + 13:27:28进度，数据源dbea4cd2c57d）\n代码测试：11/11全部通过（pass_only，不计分）。\nAI判断：答辩理解度100、评分点证据覆盖度100、四维均“要点已掌握”；属AI评价，非课程成绩。\n教师复核：状态“已复核”，是否当前待办=false，教师结论“认可AI诊断”。\n字段出处：\n“教师确认理解度100”：仅见于诊断返回，路径 教师复核.确认理解度，值100；进度返回的提交记录中无此字段，故该值仅单一来源。\n“仅一条提交”：进度返回 学号=\"20269001\"，提交记录 数组仅1项（提交=5）；据此无法推断学习进步。\n重答状态：未返回，目前无法判断是否有重答要求或重答记录。\n二、跨轮比较\n12:48:45查询仅返回教师待办队列（空）与最新提交编号5，未返回提交#5任何详细状态，无法与13:27结果比较提交状态。仅可确认：两轮待办队列均为空。\n三、仍需网页核查\n1. 教师复核页：查看“认可AI诊断”的复核依据及是否含重答要求（重答状态未返回）。\n2. 答辩原文：第1—3题回答原文及第3题追问，核对四维“掌握”判断。\n3. 代码判题详情：确认11/11通过的具体内容（隐藏样例未返回）。\n一处修正说明：原简报“提交5状态无变化”无依据，已删除；原“不必另查重答记录”已改为“无法判断”。"
+}

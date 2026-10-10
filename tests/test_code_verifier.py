@@ -160,9 +160,9 @@ class CodeVerifierTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("g++"), "当前测试环境没有g++")
     def test_auto_standard_falls_back_for_an_old_compiler(self):
-        original_run = subprocess.run
+        original_run = verifier._compile_local
 
-        def old_compiler_run(arguments, **kwargs):
+        def old_compiler_run(arguments, *args, **kwargs):
             if arguments[1] in {
                 "-std=c++17",
                 "-std=c++1z",
@@ -178,14 +178,14 @@ class CodeVerifierTests(unittest.TestCase):
                         f"'{arguments[1]}'"
                     ),
                 )
-            return original_run(arguments, **kwargs)
+            return original_run(arguments, *args, **kwargs)
 
         with (
             patch.dict(
                 os.environ,
                 {"CODE_EXECUTION_ENABLED": "true", "CXX_COMPILER": "g++"},
             ),
-            patch.object(verifier.subprocess, "run", side_effect=old_compiler_run),
+            patch.object(verifier, "_compile_local", side_effect=old_compiler_run),
         ):
             result = verifier.run_cpp_code("int main(){return 0;}")
 
@@ -209,7 +209,7 @@ class CodeVerifierTests(unittest.TestCase):
                 os.environ,
                 {"CODE_EXECUTION_ENABLED": "true", "CXX_COMPILER": "g++"},
             ),
-            patch.object(verifier.subprocess, "run", return_value=unsupported),
+            patch.object(verifier, "_compile_local", return_value=unsupported),
         ):
             result = verifier.run_cpp_code(
                 "int main(){return 0;}",
@@ -452,6 +452,18 @@ class CodeVerifierTests(unittest.TestCase):
         self.assertEqual(result["overall_status"], "环境不可用")
         self.assertEqual(result["compile"]["status"], "未执行")
         self.assertNotEqual(result["overall_status"], "编译失败")
+
+    @unittest.skipUnless(shutil.which("g++"), "当前测试环境没有g++")
+    def test_public_failure_blocks_all_pass_even_when_hidden_passes(self):
+        assignment = {"public_samples": [{"input": "1", "output": "1"}],
+                      "test_cases": [{"input": "2", "expected_output": "2", "weight": 100}]}
+        with patch.dict(os.environ, {"CODE_EXECUTION_ENABLED": "true", "CXX_COMPILER": "g++"}):
+            result = verifier.verify_cpp_code('#include <iostream>\nint main(){std::cout << 2;}', verifier.formal_test_cases(assignment))
+        self.assertEqual(result["overall_status"], "部分通过")
+        self.assertEqual((result["passed"], result["total"]), (1, 2))
+        self.assertEqual(result["scoring_mode"], "pass_only")
+        self.assertEqual((result["score"], result["max_score"]), (0, 0))
+        self.assertEqual([case["visibility"] for case in result["cases"]], ["公开", "隐藏"])
 
     def test_student_exit_marker_is_removed_from_stderr(self):
         exit_code, stderr = verifier._extract_student_exit_code(

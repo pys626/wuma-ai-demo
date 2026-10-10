@@ -1,0 +1,288 @@
+{
+  "version": 1,
+  "description": "人工标注的合成案例。真实模型结果须独立保存，不能用预期冒充实际结果。",
+  "cases": [
+    {
+      "id": "tree",
+      "title": "递归二叉树：统计节点数与数值总和",
+      "code": "#include <iostream>\n#include <vector>\n#include <utility>\nusing namespace std;\nstruct Node { long long value; int left, right; };\nclass Tree {\n    vector<Node> nodes;\npublic:\n    explicit Tree(int n) : nodes(n + 1) {}\n    void read() { for (size_t i=1;i<nodes.size();++i) cin >> nodes[i].value >> nodes[i].left >> nodes[i].right; }\n    pair<int,long long> visit(int id) const {\n        if (id == 0) return {0, 0};\n        auto left = visit(nodes[id].left);\n        auto right = visit(nodes[id].right);\n        return {1 + left.first + right.first, nodes[id].value + left.second + right.second};\n    }\n};\nint main() { int n; if (!(cin >> n) || n<0 || n>1000) return 0; Tree tree(n); tree.read(); auto result=tree.visit(n ? 1 : 0); cout << result.first << ' ' << result.second << '\\n'; }\n",
+      "question": {
+        "dimension": "程序逻辑理解",
+        "question": "visit为什么在id=0时返回{0,0}？为什么合并结果必须加1和当前节点value？若树是一条链，时间和递归栈空间如何变化？",
+        "reference_points": [
+          "空子树为递归终止条件；合并时当前节点计数加1并加入当前节点值",
+          "每个节点访问一次，时间O(n)；链状树递归深度n，栈空间O(n)"
+        ],
+        "reference_dimensions": [
+          "程序逻辑理解",
+          "分析与修改能力"
+        ]
+      },
+      "answers": [
+        {
+          "name": "正确解释",
+          "answer": "id=0表示空子树，返回{0,0}终止递归，不访问nodes[0]。合并左右子树时计数加1、总和加当前value，才能计入根节点。每个节点访问一次所以时间O(n)，链状树深度为n，递归栈空间O(n)。",
+          "expected": [
+            "掌握",
+            "掌握"
+          ]
+        },
+        {
+          "name": "解释不完整",
+          "answer": "id=0表示空子树，返回{0,0}终止递归。合并时加1和当前value是为了把当前节点也统计进去。每个节点访问一次，时间O(n)，但我还不能解释链状树的递归空间。",
+          "expected": [
+            "掌握",
+            "部分掌握"
+          ]
+        },
+        {
+          "name": "明确错误",
+          "answer": "id=0也是有效节点，所以不应该停止递归。左右子树合并已经包括根节点，因此加1和value会重复统计。递归不会占额外空间，链状树的时间和空间都是O(log n)。",
+          "expected": [
+            "理解错误",
+            "理解错误"
+          ]
+        },
+        {
+          "name": "漏答复杂度",
+          "answer": "id=0表示空子树，返回{0,0}终止递归。合并时计数加1并加当前节点值，把当前节点与左右子树一起统计。",
+          "expected": [
+            "掌握",
+            "未体现"
+          ]
+        }
+      ],
+      "samples": [
+        {
+          "name": "空树",
+          "input": "0\n",
+          "expected_output": "0 0\n"
+        },
+        {
+          "name": "单个负值节点",
+          "input": "1\n-7 0 0\n",
+          "expected_output": "1 -7\n"
+        },
+        {
+          "name": "左右子树",
+          "input": "3\n10 2 3\n-2 0 0\n7 0 0\n",
+          "expected_output": "3 15\n"
+        },
+        {
+          "name": "长整型总和",
+          "input": "2\n2000000000 2 0\n2000000000 0 0\n",
+          "expected_output": "2 4000000000\n"
+        }
+      ],
+      "requirements": [
+        "通过空节点终止递归，合并左右子树并计入当前节点；不得遗漏根节点",
+        "按照题面格式读取输入并输出计算结果"
+      ],
+      "rubric": [
+        {
+          "name": "核心算法符合要求",
+          "weight": 70,
+          "source": "代码",
+          "must_defend": false,
+          "description": "通过空节点终止递归，合并左右子树并计入当前节点；不得遗漏根节点"
+        },
+        {
+          "name": "输入输出符合题目",
+          "weight": 30,
+          "source": "代码",
+          "must_defend": false,
+          "description": "读取完整输入，输出计算结果，不添加提示文本"
+        }
+      ],
+      "incorrect_code": "#include <iostream>\n#include <vector>\n#include <utility>\nusing namespace std;\nstruct Node { long long value; int left, right; };\nclass Tree {\n    vector<Node> nodes;\npublic:\n    explicit Tree(int n) : nodes(n + 1) {}\n    void read() { for (size_t i=1;i<nodes.size();++i) cin >> nodes[i].value >> nodes[i].left >> nodes[i].right; }\n    pair<int,long long> visit(int id) const {\n        if (id == 0) return {0, 0};\n        auto left = visit(nodes[id].left);\n        auto right = visit(nodes[id].right);\n        return {left.first + right.first, nodes[id].value + left.second + right.second};\n    }\n};\nint main() { int n; if (!(cin >> n) || n<0 || n>1000) return 0; Tree tree(n); tree.read(); auto result=tree.visit(n ? 1 : 0); cout << result.first << ' ' << result.second << '\\n'; }\n"
+    },
+    {
+      "id": "graph",
+      "title": "无权图BFS：求起点到终点的最少边数",
+      "code": "#include <iostream>\n#include <vector>\n#include <queue>\nusing namespace std;\nint main() {\n    int n,m,s,t; if(!(cin>>n>>m>>s>>t) || n<1 || n>1000 || m<0 || m>100000 || s<1 || s>n || t<1 || t>n) return 0;\n    vector<vector<int>> graph(n+1);\n    for(int i=0;i<m;++i) { int u,v; cin>>u>>v; if(u<1||u>n||v<1||v>n) return 0; graph[u].push_back(v); graph[v].push_back(u); }\n    vector<int> dist(n+1,-1); queue<int> q; dist[s]=0; q.push(s);\n    while(!q.empty()) { int u=q.front(); q.pop(); for(int v:graph[u]) if(dist[v]==-1) { dist[v]=dist[u]+1; q.push(v); } }\n    cout<<dist[t]<<'\\n';\n}\n",
+      "question": {
+        "dimension": "程序逻辑理解",
+        "question": "为什么必须在入队前设置dist[v]，而不能一直保持-1？队列为什么能得到最少边数？如果把边改成不同的正权值，直接沿用此算法是否正确？",
+        "reference_points": [
+          "入队前标记已发现，避免环和重复边导致重复入队；FIFO按距离层次访问，首次距离是最少边数",
+          "不同正权值时最少边数不等于最小总权值，应改为适用于非负权的最短路算法，如Dijkstra"
+        ],
+        "reference_dimensions": [
+          "程序逻辑理解",
+          "分析与修改能力"
+        ]
+      },
+      "answers": [
+        {
+          "name": "正确解释",
+          "answer": "dist[v]在入队前从-1改成dist[u]+1，立即标记已发现，避免环和重复边反复入队。FIFO先处理距离较小的一层，因此首次发现就是最少边数。边权不同时最少边数不一定总权值最小，应改为Dijkstra并维护累计权值。",
+          "expected": [
+            "掌握",
+            "掌握"
+          ]
+        },
+        {
+          "name": "解释不完整",
+          "answer": "dist[v]入队前赋值可以避免重复访问，队列按先进先出处理。但我还没有说明为什么首次发现就一定是最少边数。不同正权边需要用Dijkstra比较累计距离。",
+          "expected": [
+            "部分掌握",
+            "掌握"
+          ]
+        },
+        {
+          "name": "明确错误",
+          "answer": "dist[v]可以一直保持-1，重复入队不会影响有环图终止。队列是后进先出，所以第一次发现总是最长路径。不同正权值也直接用BFS数边就得到最小总权值。",
+          "expected": [
+            "理解错误",
+            "理解错误"
+          ]
+        },
+        {
+          "name": "漏答权值修改",
+          "answer": "入队前设置dist[v]能标记已发现，避免环和重复边导致重复入队。FIFO逐层访问，所以第一次发现的距离就是最少边数。",
+          "expected": [
+            "掌握",
+            "未体现"
+          ]
+        }
+      ],
+      "samples": [
+        {
+          "name": "起终点相同",
+          "input": "1 0 1 1\n",
+          "expected_output": "0\n"
+        },
+        {
+          "name": "不可达",
+          "input": "3 1 1 3\n1 2\n",
+          "expected_output": "-1\n"
+        },
+        {
+          "name": "环和捷径",
+          "input": "4 4 1 4\n1 2\n2 3\n3 1\n3 4\n",
+          "expected_output": "2\n"
+        },
+        {
+          "name": "重复边与自环",
+          "input": "2 3 1 2\n1 1\n1 2\n1 2\n",
+          "expected_output": "1\n"
+        }
+      ],
+      "requirements": [
+        "使用队列和入队时标记的BFS计算无权图最短路；不能用DFS代替",
+        "按照题面格式读取输入并输出计算结果"
+      ],
+      "rubric": [
+        {
+          "name": "核心算法符合要求",
+          "weight": 70,
+          "source": "代码",
+          "must_defend": false,
+          "description": "使用队列和入队时标记的BFS计算无权图最短路；不能用DFS代替"
+        },
+        {
+          "name": "输入输出符合题目",
+          "weight": 30,
+          "source": "代码",
+          "must_defend": false,
+          "description": "读取完整输入，输出计算结果，不添加提示文本"
+        }
+      ],
+      "incorrect_code": "#include <iostream>\n#include <vector>\n#include <stack>\nusing namespace std;\nint main() {\n    int n,m,s,t; if(!(cin>>n>>m>>s>>t) || n<1 || n>1000 || m<0 || m>100000 || s<1 || s>n || t<1 || t>n) return 0;\n    vector<vector<int>> graph(n+1);\n    for(int i=0;i<m;++i) { int u,v; cin>>u>>v; if(u<1||u>n||v<1||v>n) return 0; graph[u].push_back(v); graph[v].push_back(u); }\n    vector<int> dist(n+1,-1); stack<int> q; dist[s]=0; q.push(s);\n    while(!q.empty()) { int u=q.top(); q.pop(); for(int v:graph[u]) if(dist[v]==-1) { dist[v]=dist[u]+1; q.push(v); } }\n    cout<<dist[t]<<'\\n';\n}\n"
+    },
+    {
+      "id": "dp",
+      "title": "一维动态规划：0/1背包",
+      "code": "#include <iostream>\n#include <vector>\n#include <algorithm>\nusing namespace std;\nint main() {\n    int n, capacity; if(!(cin>>n>>capacity)||n<0||n>100||capacity<0||capacity>1000) return 0;\n    vector<long long> dp(capacity+1,0);\n    for(int i=0;i<n;++i) { int weight; long long value; cin>>weight>>value; if(weight<1||value<0) return 0;\n        for(int c=capacity;c>=weight;--c) dp[c]=max(dp[c],dp[c-weight]+value);\n    }\n    cout<<dp[capacity]<<'\\n';\n}\n",
+      "question": {
+        "dimension": "程序逻辑理解",
+        "question": "dp[c]表示什么，为什么容量必须从大到小遍历？若改成从小到大遍历，会出现什么具体变化？该程序的时间和辅助空间分别是多少？",
+        "reference_points": [
+          "dp[c]表示已处理物品中容量不超过c的最大价值；倒序使用上一轮状态，避免同一物品重复选，正序可能变成完全背包",
+          "n件物品每件扫描容量，时间O(nC)，一维数组辅助空间O(C)"
+        ],
+        "reference_dimensions": [
+          "程序逻辑理解",
+          "分析与修改能力"
+        ]
+      },
+      "answers": [
+        {
+          "name": "正确解释",
+          "answer": "dp[c]是已处理物品在总重量不超过c时的最大价值。倒序让dp[c-weight]仍是上一件物品处理后的状态，因此当前物品最多选一次。正序会读取当前物品已经更新过的状态，使它能被重复选，变成完全背包式转移。n件物品各扫描C个容量，时间O(nC)，一维数组空间O(C)。",
+          "expected": [
+            "掌握",
+            "掌握"
+          ]
+        },
+        {
+          "name": "解释不完整",
+          "answer": "dp[c]表示容量不超过c的最大价值，倒序是为了让当前物品只选一次。但我还不能解释它为何必须读取上一轮状态，也没说明正序会怎样。双重循环时间O(nC)，一维dp辅助空间O(C)。",
+          "expected": [
+            "部分掌握",
+            "掌握"
+          ]
+        },
+        {
+          "name": "明确错误",
+          "answer": "dp[c]表示恰好选c件物品的价值。容量从小到大或从大到小没有区别，同一件物品不会重复选择。时间O(n+C)，因为两层循环互不嵌套；辅助空间O(1)。",
+          "expected": [
+            "理解错误",
+            "理解错误"
+          ]
+        },
+        {
+          "name": "漏答复杂度",
+          "answer": "dp[c]是已处理物品在重量不超过c时的最大价值。倒序读取上一轮状态，保证同一件物品只用一次；正序会重复使用当前物品而变成完全背包式转移。",
+          "expected": [
+            "掌握",
+            "未体现"
+          ]
+        }
+      ],
+      "samples": [
+        {
+          "name": "没有物品",
+          "input": "0 5\n",
+          "expected_output": "0\n"
+        },
+        {
+          "name": "零容量",
+          "input": "1 0\n1 9\n",
+          "expected_output": "0\n"
+        },
+        {
+          "name": "阻止重复取物",
+          "input": "1 4\n2 3\n",
+          "expected_output": "3\n"
+        },
+        {
+          "name": "组合最优",
+          "input": "3 5\n2 3\n3 4\n4 5\n",
+          "expected_output": "7\n"
+        }
+      ],
+      "requirements": [
+        "容量倒序更新一维DP，保证每件物品最多选择一次；不能按完全背包重复取物",
+        "按照题面格式读取输入并输出计算结果"
+      ],
+      "rubric": [
+        {
+          "name": "核心算法符合要求",
+          "weight": 70,
+          "source": "代码",
+          "must_defend": false,
+          "description": "容量倒序更新一维DP，保证每件物品最多选择一次；不能按完全背包重复取物"
+        },
+        {
+          "name": "输入输出符合题目",
+          "weight": 30,
+          "source": "代码",
+          "must_defend": false,
+          "description": "读取完整输入，输出计算结果，不添加提示文本"
+        }
+      ],
+      "incorrect_code": "#include <iostream>\n#include <vector>\n#include <algorithm>\nusing namespace std;\nint main() {\n    int n, capacity; if(!(cin>>n>>capacity)||n<0||n>100||capacity<0||capacity>1000) return 0;\n    vector<long long> dp(capacity+1,0);\n    for(int i=0;i<n;++i) { int weight; long long value; cin>>weight>>value; if(weight<1||value<0) return 0;\n        for(int c=weight;c<=capacity;++c) dp[c]=max(dp[c],dp[c-weight]+value);\n    }\n    cout<<dp[capacity]<<'\\n';\n}\n"
+    }
+  ]
+}

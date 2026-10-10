@@ -5,6 +5,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+import sqlite3
 
 import database as db
 
@@ -29,11 +31,11 @@ class LearnBuddyConnectorTests(unittest.TestCase):
         db.DB_PATH = self.original
         self.temp.cleanup()
 
-    def call_server(self, messages):
+    def call_server(self, messages, database=None):
         script = Path(__file__).resolve().parents[1] / "learnbuddy" / "mcp_server.py"
-        env = dict(os.environ, WUMA_AI_DB_PATH=str(db.DB_PATH))
+        env = dict(os.environ, WUMA_AI_DB_PATH=str(database or db.DB_PATH))
         process = subprocess.run([sys.executable, str(script)], input="\n".join(json.dumps(x) for x in messages) + "\n",
-                                 text=True, capture_output=True, env=env, check=True, timeout=10)
+                                 text=True, encoding="utf-8", capture_output=True, env=env, check=True, timeout=10)
         return [json.loads(line) for line in process.stdout.splitlines()]
 
     def test_initialize_lists_four_read_only_tools(self):
@@ -42,6 +44,7 @@ class LearnBuddyConnectorTests(unittest.TestCase):
             {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
         ])
         self.assertEqual(replies[0]["result"]["serverInfo"]["name"], "wuma-ai-learnbuddy")
+        self.assertEqual(replies[0]["result"]["serverInfo"]["version"], "1.4.0")
         self.assertEqual(len(replies[1]["result"]["tools"]), 4)
         self.assertTrue(all(tool["name"].startswith("wuma_") for tool in replies[1]["result"]["tools"]))
 
@@ -52,7 +55,7 @@ class LearnBuddyConnectorTests(unittest.TestCase):
         self.assertIn("不得把“答辩理解度”改写成“综合掌握度”", skill_text)
         self.assertIn("不增加“补充说明”", skill_text)
         self.assertIn("不得据此推断“待复核”", skill_text)
-        self.assertIn("已处理，但学生仍需巩固", skill_text)
+        self.assertIn("教师复核已完成；AI认为该学生本次回答仍有错误或遗漏", skill_text)
 
     def test_skill_and_setup_describe_platform_model_connector_boundaries(self):
         root = Path(__file__).resolve().parents[1]
@@ -65,8 +68,8 @@ class LearnBuddyConnectorTests(unittest.TestCase):
 
         self.assertIn("LearnBuddy是交互载体", skill_text)
         self.assertIn("平台配置", skill_text)
-        self.assertIn("平台底部显示哪个可用模型不影响", setup_text)
-        self.assertIn("赛事要求体现为最终操作与结果均在LearnBuddy中呈现", setup_text)
+        self.assertIn("LearnBuddy组织教师对话", setup_text)
+        self.assertIn("教师在悟码AI网页保存复核结论", setup_text)
         self.assertNotIn("选择平台提供的腾讯官方模型", setup_text)
 
     def test_diagnosis_is_structured_and_does_not_leak_private_evidence(self):
@@ -77,10 +80,43 @@ class LearnBuddyConnectorTests(unittest.TestCase):
         for secret in ["SECRET_CODE", "SECRET_INPUT", "SECRET_OUTPUT", "真实元素初始化"]:
             self.assertNotIn(secret, text)
 
+    def test_dimension_evidence_keeps_status_without_private_quote_or_reference(self):
+        report = db.get_report(self.submission)
+        report["dimension_evidence"] = {"程序逻辑理解": {
+            "status": "已考查", "score": 75, "reason": "PRIVATE_DIMENSION_REASON",
+            "points": [{"question": 1, "status": "部分掌握", "source": "首次回答",
+                        "confidence": "高", "usable": True,
+                        "answer_quote": "PRIVATE_ANSWER_QUOTE",
+                        "reference_point": "PRIVATE_REFERENCE_POINT",
+                        "reason": "PRIVATE_POINT_REASON"}]}}
+        db.save_report(self.submission, report, "2026-10-10 20:00")
+        response = self.call_server([{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": "wuma_student_diagnosis", "arguments": {"submission_id": self.submission}}}])[0]
+        text = response["result"]["content"][0]["text"]
+        for marker in ["PRIVATE_ANSWER_QUOTE", "PRIVATE_REFERENCE_POINT", "PRIVATE_DIMENSION_REASON", "PRIVATE_POINT_REASON"]:
+            self.assertNotIn(marker, text)
+        dimension = json.loads(text)["四维作答依据"]["程序逻辑理解"]
+        self.assertEqual(dimension["score"], 75)
+        self.assertEqual(dimension["points"], [{"question": 1, "status": "部分掌握", "source": "首次回答",
+                                             "confidence": "高", "usable": True}])
+
     def test_unknown_submission_returns_tool_error_without_crashing_server(self):
         response = self.call_server([{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
             "name": "wuma_student_diagnosis", "arguments": {"submission_id": 999}}}])[0]
         self.assertTrue(response["result"]["isError"])
+
+    def test_pass_only_verification_is_not_reported_as_zero_or_missing_score(self):
+        verification = db.get_submission(self.submission)["code_verification"]
+        verification.update(scoring_mode="pass_only", score=0, max_score=0)
+        with db.get_connection() as connection:
+            connection.execute("UPDATE submissions SET code_verification_json = ? WHERE id = ?",
+                               (json.dumps(verification), self.submission))
+        response = self.call_server([{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": "wuma_student_diagnosis", "arguments": {"submission_id": self.submission}}}])[0]
+        result = json.loads(response["result"]["content"][0]["text"])
+        self.assertEqual(result["代码判题"]["score"], "不计分")
+        self.assertEqual(result["代码判题"]["scoring_mode"], "pass_only")
+        self.assertEqual(result["代码判题"]["准入规则"], "全部公开与隐藏样例通过")
 
     def test_overview_pending_count_and_latest_summary_use_same_evidence_rule(self):
         evaluation = {"score": 85, "confidence": "高", "missing_points": ["没有解释边界"],
@@ -175,3 +211,29 @@ class LearnBuddyConnectorTests(unittest.TestCase):
     def test_connector_forces_utf8_stdio_on_windows(self):
         source = (Path(__file__).resolve().parents[1] / "learnbuddy" / "mcp_server.py").read_text(encoding="utf-8")
         self.assertIn('reconfigure(encoding="utf-8")', source)
+
+    def test_invalid_databases_return_tool_error_keep_ping_alive_and_do_not_create_files(self):
+        for filename, contents in [("missing.db", None), ("empty.db", b""), ("corrupt.db", b"not a sqlite database")]:
+            with self.subTest(filename=filename):
+                path = Path(self.temp.name) / filename
+                if contents is not None:
+                    path.write_bytes(contents)
+                replies = self.call_server([
+                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                    {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "wuma_teacher_overview", "arguments": {}}},
+                    {"jsonrpc": "2.0", "id": 3, "method": "ping"},
+                ], database=path)
+                self.assertEqual([item['id'] for item in replies], [1, 2, 3])
+                self.assertTrue(replies[1]['result']['isError'])
+                self.assertIn("数据库读取失败", replies[1]['result']['content'][0]['text'])
+                if contents is None:
+                    self.assertFalse(path.exists())
+                else:
+                    self.assertEqual(path.read_bytes(), contents)
+
+    def test_read_only_connection_prevents_accidental_writes(self):
+        with patch.object(db, "READ_ONLY", True):
+            with self.assertRaises(sqlite3.OperationalError):
+                with db.get_connection() as connection:
+                    connection.execute("DELETE FROM submissions")
+        self.assertIsNotNone(db.get_submission(self.submission))

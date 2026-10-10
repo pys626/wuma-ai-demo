@@ -15,3 +15,4 @@ data/*.db-wal
 tests
 *.zip
 screenshots
+learnbuddy/mcp_config.generated.json

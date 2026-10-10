@@ -29,6 +29,24 @@ class TeacherInsightsTests(unittest.TestCase):
         result = insights.mastery_summary(self.report, [question(status="理解错误")])
         self.assertEqual(result["status"], "需要巩固")
 
+    def test_high_overall_with_partial_point_names_the_actual_question_and_gap(self):
+        report = {**self.report, "level": "理解充分"}
+        result = insights.mastery_summary(report, [question(), question("交换保留重复元素", "部分掌握")])
+        self.assertEqual(result["status"], "需要巩固")
+        self.assertIn("第2题", result["text"])
+        self.assertIn("交换保留重复元素", result["text"])
+        self.assertIn("整体表现", result["text"])
+
+    def test_contradictory_model_fields_require_checking_not_false_error_claim(self):
+        item = question()
+        item["final_evaluation"]["missing_points"] = ["前缀版本相减"]
+        before = copy.deepcopy(item)
+        result = insights.mastery_summary(self.report, [item])
+        self.assertEqual(result["status"], "待核查")
+        self.assertIn("第1题", result["text"])
+        self.assertIn("逐点标记全部掌握", result["text"])
+        self.assertEqual(item, before)
+
     def test_no_answer_missing_evaluation_and_low_confidence_are_not_failure(self):
         for q in [question(answer=""), question(final_evaluation={}), question(confidence="低", status="理解错误")]:
             self.assertEqual(insights.mastery_summary(self.report, [q])["status"], "证据不足")
@@ -63,7 +81,7 @@ class TeacherInsightsTests(unittest.TestCase):
 
     def test_final_evaluation_overrides_old_mistake(self):
         q = question(initial_evaluation={"misconceptions": ["旧错误"], "confidence": "高"})
-        self.assertEqual(insights.question_finding(q, 2)[1], "已有掌握证据")
+        self.assertEqual(insights.question_finding(q, 2)[1], "要点已掌握")
 
     def test_errors_and_review_reason_precede_static_preliminary_and_relative_minimum(self):
         self.report["review_reasons"] = ["前后回答矛盾，需要复核"]
@@ -114,7 +132,7 @@ class TeacherInsightsTests(unittest.TestCase):
                     status=status, code_verification={"overall_status": code}, **kw)
 
     def attention(self, record):
-        source = (Path(__file__).resolve().parents[1] / "app.py").read_text()
+        source = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
         node = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "teacher_record_needs_attention")
         ns = {}
         exec(compile(ast.Module(body=[node], type_ignores=[]), "app.py", "exec"), ns)
