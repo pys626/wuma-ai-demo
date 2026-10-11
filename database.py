@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 
@@ -14,6 +15,21 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DB_PATH = BASE_DIR / "data" / "wuma_ai.db"
 DB_PATH = runtime_config.database_path()
 READ_ONLY = False
+_scoped_database = ContextVar("wuma_scoped_database", default=None)
+
+
+def current_database_path():
+    """Each interactive visitor has a request-bound database; local defaults stay intact."""
+    return _scoped_database.get() or DB_PATH
+
+
+@contextmanager
+def database_scope(path):
+    token = _scoped_database.set(Path(path).resolve())
+    try:
+        yield
+    finally:
+        _scoped_database.reset(token)
 
 # 旧表overall为NOT NULL。-1只作为内部未评分标记，所有读取入口还原为None。
 UNASSESSED_OVERALL = -1
@@ -260,10 +276,10 @@ def get_connection():
     """创建连接并保证提交、回滚和关闭，兼容Windows文件锁。"""
     if READ_ONLY:
         connection = sqlite3.connect(
-            Path(DB_PATH).resolve().as_uri() + "?mode=ro", uri=True
+            current_database_path().resolve().as_uri() + "?mode=ro", uri=True
         )
     else:
-        connection = sqlite3.connect(DB_PATH)
+        connection = sqlite3.connect(current_database_path())
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     try:
@@ -576,7 +592,7 @@ def _seed_default_assignment(connection):
 
 def init_db():
     """创建数据表，并自动兼容旧版数据库。"""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    current_database_path().parent.mkdir(parents=True, exist_ok=True)
 
     with get_connection() as connection:
         connection.executescript(

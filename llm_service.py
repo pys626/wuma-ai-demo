@@ -2,6 +2,7 @@ import json
 
 import llm_provider as provider
 import defense_evidence
+import demo_playback
 
 EVALUATION_VERSION = "v1.4-premise-validation-v4"
 
@@ -88,6 +89,8 @@ def _remove_code_fence(text):
 
 def _chat_json(messages, max_tokens=1800):
     """调用当前配置的模型，并将返回内容解析成Python字典。"""
+    if demo_playback.active():
+        raise LLMServiceError("在线固定案例演示不发送新的模型请求。请使用完整本地版实时评价。")
     try:
         content = provider.chat_text(messages, max_tokens=max_tokens)
     except provider.LLMProviderError as error:
@@ -1096,3 +1099,10 @@ def generate_report(submission, qa_records):
         "review_required": bool(review_reasons),
         "review_reasons": review_reasons,
     }
+
+
+# Only the dedicated interactive entry activates saved-case dispatch.
+for _playback_function in (is_configured, provider_name, model_name, is_tencent_provider,
+        preliminary_review, generate_questions, evaluate_initial_answer,
+        evaluate_follow_up, generate_report, generate_learning_hint):
+    globals()[_playback_function.__name__] = demo_playback.dispatch(_playback_function)

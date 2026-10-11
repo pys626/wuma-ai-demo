@@ -48,7 +48,7 @@ class FinalsDemoTests(unittest.TestCase):
     def test_public_entry_has_password_free_roles_and_read_only_teacher_report(self):
         root = Path(__file__).resolve().parents[1]
         with patch.dict("os.environ", {"WUMA_AI_DB_PATH": str(db.DB_PATH)}):
-            page = AppTest.from_file(str(root / "competition_demo.py")).run(timeout=20)
+            page = AppTest.from_file(str(root / "readonly_demo.py")).run(timeout=20)
             self.assertEqual(len(page.exception), 0)
             self.assertTrue(any("已保存的真实模型评价" in item.value for item in page.info))
             self.assertTrue(any(button.label == "体验学生端（案例学生甲）" for button in page.button))

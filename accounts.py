@@ -56,7 +56,7 @@ def _upgrade_role_schema(connection):
     if "'admin'" in schema:
         return
     connection.commit()
-    backup_path=Path(db.DB_PATH).resolve().with_suffix('.before_role_separation.sqlite3')
+    backup_path=Path(db.current_database_path()).resolve().with_suffix('.before_role_separation.sqlite3')
     if not backup_path.exists():
         # A database-native snapshot keeps password hashes and references intact.
         # The file is local recovery material and must not be exported or logged.
@@ -179,12 +179,12 @@ def bootstrap(setup_password, expected_setup_password, username, name, password,
         import assignment_drafts
         from local_store import write_json
         try:
-            old_draft=assignment_drafts.load_draft(db.DB_PATH)
+            old_draft=assignment_drafts.load_draft(db.current_database_path())
         except assignment_drafts.DraftError:
             old_draft=None
             _audit(c,aid,'旧草稿无法迁移：原文件保留',cid)
         if old_draft:
-            destination=assignment_drafts.personal_draft_path(db.DB_PATH,teacher_id,cid)
+            destination=assignment_drafts.personal_draft_path(db.current_database_path(),teacher_id,cid)
             if not destination.exists():write_json(destination,old_draft)
     return aid
 

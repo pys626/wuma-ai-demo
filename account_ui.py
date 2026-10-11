@@ -7,6 +7,7 @@ import streamlit as st
 import accounts
 import access_control
 import database as db
+import demo_playback
 import browser_session
 from ui_uploads import chinese_file_uploader
 
@@ -363,16 +364,22 @@ def settings(a,benchmark):
         password_form(a)
     if not is_admin:
         with st.expander('LearnBuddy－个人只读连接'):
+            if demo_playback.active():
+                st.info('在线访客空间不提供本机MCP连接配置。完整本地版保留个人只读连接，可用于录屏展示。')
+                return
             st.caption('连接仅能读取本教师账号负责的班级。生成新配置会撤销旧连接令牌；请勿向他人分享配置文件。')
             if st.button('生成个人连接配置'):
                 import launch
                 token=accounts.connector_token(a['id'])
-                config=launch.connector_config(db.DB_PATH)
+                config=launch.connector_config(db.current_database_path())
                 server=next(iter(config['mcpServers'].values()))
                 server['env']['WUMA_TEACHER_TOKEN']=token
                 st.download_button('下载个人连接配置',json.dumps(config,ensure_ascii=False,indent=2),file_name='wuma_personal_mcp.json',mime='application/json')
     if is_admin:
         st.subheader('高级诊断')
+        if demo_playback.active():
+            st.info('模型更新后的真实对照诊断请在完整本地版进行；在线演示不调用新模型。')
+            return
         st.caption('用于系统维护和模型更新后的核验，不属于日常批改步骤。真实模型对照会使用模型额度。')
         if st.checkbox('显示高级诊断',value=False,key='show_advanced_diagnostics'):
             benchmark()

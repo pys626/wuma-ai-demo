@@ -16,6 +16,7 @@ import streamlit.components.v1 as components
 import code_verifier as verifier
 import database as db
 import demo_mode
+import demo_playback
 import llm_service as llm
 import teacher_insights as insights
 import runtime_config
@@ -809,7 +810,7 @@ def render_centered_dataframe(data, highlighted_rows=(), evidence_kind=None):
 
 
 def ai_checkpoint(kind, inputs):
-    return ai_workflow.Checkpoint(db.DB_PATH, {
+    return ai_workflow.Checkpoint(db.current_database_path(), {
         "kind": kind, "inputs": inputs, "provider": llm.provider_name(),
         "model": llm.model_name(), "evaluation_version": llm.EVALUATION_VERSION,
     })
@@ -1554,11 +1555,11 @@ def defense_admission_result(assignment, verification):
 
 def prepare_student_draft(assignment):
     student_id = logged_in_student_id()
-    key = str(student_drafts.draft_path(db.DB_PATH, student_id, assignment["id"]))
+    key = str(student_drafts.draft_path(db.current_database_path(), student_id, assignment["id"]))
     marker = "student_draft_loaded_" + hashlib.sha256(key.encode()).hexdigest()
     if not st.session_state.get(marker):
         try:
-            saved = student_drafts.load_draft(db.DB_PATH, student_id, assignment["id"])
+            saved = student_drafts.load_draft(db.current_database_path(), student_id, assignment["id"])
         except (OSError, student_drafts.DraftError) as error:
             saved = None
             st.session_state[marker + "_blocked"] = True
@@ -1585,7 +1586,7 @@ def persist_student_draft(assignment, key, values):
     saved = st.session_state.get(marker + "_saved", {})
     if saved.get("data") != data or saved.get("assignment_updated_at") != assignment.get("updated_at", ""):
         try:
-            saved = student_drafts.save_draft(db.DB_PATH, logged_in_student_id(), assignment["id"], data,
+            saved = student_drafts.save_draft(db.current_database_path(), logged_in_student_id(), assignment["id"], data,
                                              assignment.get("updated_at", ""))
             st.session_state[marker + "_saved"] = saved
         except (OSError, student_drafts.DraftError) as error:
@@ -1716,6 +1717,12 @@ def show_submission():
     )
     assignment = assignment_map[selected_label]
     st.session_state.selected_assignment_id = assignment["id"]
+    if demo_playback.active():
+        st.info("在线交互演示：填写和保存走真实流程；AI与判题仅回放选择排序固定案例的已保存结果。修改材料后不能套用原评价。")
+        if assignment["title"] == demo_playback.fixture()["assignment"]["title"] and st.button("填入演示材料", key=f"demo_materials_{assignment['id']}"):
+            materials = demo_playback.fixture()
+            for field in ("code", "explanation", "lab_report"):
+                st.session_state[f"{field}_{assignment['id']}"] = materials.get(field, "")
     if assignment.get("verification_enabled"):
         st.info(
             "本实验操作顺序：填写代码与教师要求的材料 → 正式评测代码 → "
@@ -1877,7 +1884,7 @@ def show_submission():
         formal_judge_clicked = False
         if assignment.get("verification_enabled"):
             formal_judge_clicked = st.button(
-                "正式评测代码",
+                "载入本例已保存的评测证据" if demo_playback.active() else "正式评测代码",
                 type="primary",
                 width="stretch",
                 disabled=assignment["language"] != "C++",
@@ -1977,7 +1984,7 @@ def show_submission():
         code,
         explanation_required=assignment.get("explanation_required", True),
     ):
-        with st.spinner("正在编译代码并运行全部公开与隐藏测试……"):
+        with st.spinner("正在核对材料并载入已保存的评测证据……" if demo_playback.active() else "正在编译代码并运行全部公开与隐藏测试……"):
             st.session_state.formal_judge_results[result_key] = {
                 "code": code,
                 "student_id": student_id.strip(),
@@ -2080,10 +2087,10 @@ def show_submission():
 
     if admitted:
         st.success(admission_message)
-        st.caption("AI会根据你提交的代码与材料生成文字答辩问题，并根据你的回答决定是否追问。")
+        st.caption("本次载入与固定材料对应的已保存问题；提交记录会保存在你的独立演示空间。" if demo_playback.active() else "AI会根据你提交的代码与材料生成文字答辩问题，并根据你的回答决定是否追问。")
         submitted = st.button(
             (
-                "进入AI答辩"
+                "进入案例答辩（结果回放）" if demo_playback.active() else "进入AI答辩"
                 if assignment.get("verification_enabled")
                 else "调用AI分析并开始答辩"
             ),
@@ -2201,7 +2208,7 @@ def show_submission():
     st.session_state.form_student_id = student_id.strip()
     st.session_state.submission_drafts.pop(draft_key, None)
     try:
-        student_drafts.clear_draft(db.DB_PATH, logged_in_student_id(), assignment["id"])
+        student_drafts.clear_draft(db.current_database_path(), logged_in_student_id(), assignment["id"])
         marker = "student_draft_loaded_" + hashlib.sha256(draft_key.encode()).hexdigest()
         st.session_state.pop(marker + "_saved", None)
     except OSError:
@@ -2289,7 +2296,7 @@ def show_report_retry():
         st.error(st.session_state.report_error)
 
     if st.button("重新生成报告", type="primary"):
-        with st.spinner("AI正在重新汇总答辩记录……"):
+        with st.spinner("正在载入本例已保存的报告……" if demo_playback.active() else "AI正在重新汇总答辩记录……"):
             try:
                 finalize_report()
             except (llm.LLMServiceError, sqlite3.Error, ai_workflow.WorkflowError, OSError, ValueError) as error:
@@ -2303,7 +2310,7 @@ def answer_draft_context(index, stage, question, follow_up=""):
                   for name in ["question", "dimension", "reference_points", "reference_dimensions"]}
     if stage == "follow_up":
         normalized["follow_up"] = follow_up
-    return (db.DB_PATH, logged_in_student_id(), st.session_state.submission_id, index, stage, normalized)
+    return (db.current_database_path(), logged_in_student_id(), st.session_state.submission_id, index, stage, normalized)
 
 
 def save_answer_draft(widget_key, context):
@@ -2335,6 +2342,11 @@ def render_answer_editor(index, stage, question, follow_up=""):
             st.session_state[widget_key + "_saved"] = saved
             if saved["answer"]:
                 st.info("已恢复本题的" + ("追问" if stage == "follow_up" else "首次") + "回答草稿。")
+    if demo_playback.active():
+        example = demo_playback.example_answer(question, stage, st.session_state.get("_interactive_case") or 0)
+        if example and st.button("填入示例回答", key=f"demo_answer_{index}_{stage}"):
+            st.session_state[widget_key] = example
+        st.caption("在线只回放与示例原文匹配的已保存评价；任意新回答请在完整本地版实时评价。" if example else "本题尚无可回放的作答评价；可浏览问题，实时作答请使用完整本地版。")
     answer = st.text_area("请输入追问回答" if stage == "follow_up" else "请输入你的回答",
                           height=140 if stage == "follow_up" else 150, key=widget_key,
                           max_chars=100000, on_change=save_answer_draft, args=(widget_key, context))
@@ -2355,7 +2367,7 @@ def clear_answer_draft(context):
 
 
 def show_defense():
-    page_header("AI自适应答辩", "每次提交回答都会调用AI评价；回答不充分时最多追问一次。")
+    page_header("AI自适应答辩", "在线案例回放：使用示例回答查看已保存的AI评价与追问，提交记录真实保存。" if demo_playback.active() else "每次提交回答都会调用AI评价；回答不充分时最多追问一次。")
     show_flash()
 
     if st.session_state.submission_id is None:
@@ -2404,7 +2416,7 @@ def show_defense():
 
     if not st.session_state.awaiting_follow_up:
         answer, draft_context, draft_saved = render_answer_editor(index, "initial", question)
-        answer_submitted = st.button("提交给AI评价", type="primary", key=f"answer_submit_{index}")
+        answer_submitted = st.button("提交并查看已保存评价" if demo_playback.active() else "提交给AI评价", type="primary", key=f"answer_submit_{index}")
 
         if answer_submitted:
             if not answer.strip():
@@ -2414,7 +2426,7 @@ def show_defense():
                 st.error("当前回答尚未保存至系统。请先复制回答备份，并联系任课教师或系统管理员核查后重试。")
                 return
 
-            with st.spinner("AI正在评价回答并判断是否需要追问……"):
+            with st.spinner("正在核对示例回答并载入已保存评价……" if demo_playback.active() else "AI正在评价回答并判断是否需要追问……"):
                 try:
                     submission = st.session_state.submission
                     checkpoint = ai_checkpoint("initial_answer", {"submission_id": st.session_state.submission_id,
@@ -2474,7 +2486,7 @@ def show_defense():
                 return
 
             answer_record = st.session_state.answers[index]
-            with st.spinner("AI正在结合两次回答生成最终评价……"):
+            with st.spinner("正在核对两次回答并载入已保存评价……" if demo_playback.active() else "AI正在结合两次回答生成最终评价……"):
                 try:
                     submission = st.session_state.submission
                     checkpoint = ai_checkpoint("follow_up_answer", {"submission_id": st.session_state.submission_id,
@@ -3683,13 +3695,13 @@ def assignment_editor_text_default(key, value):
 
 def prepare_assignment_create_draft():
     """Restore once per teacher/class draft, before creating any form widgets."""
-    source = str(assignment_drafts.draft_path(db.DB_PATH))
+    source = str(assignment_drafts.draft_path(db.current_database_path()))
     reset = st.session_state.pop("assignment_create_reset_requested", False)
     if reset or st.session_state.get("assignment_create_loaded_for") != source:
         document = None
         if not reset and not demo_mode.demo_read_only():
             try:
-                document = assignment_drafts.load_draft(db.DB_PATH)
+                document = assignment_drafts.load_draft(db.current_database_path())
             except (OSError, assignment_drafts.DraftError) as error:
                 st.warning(f"草稿恢复失败：{error}")
         for key in list(st.session_state.keys()):
@@ -3709,7 +3721,7 @@ def save_assignment_create_draft(values):
     if demo_mode.demo_read_only():
         return False
     try:
-        document = assignment_drafts.save_draft(db.DB_PATH, values)
+        document = assignment_drafts.save_draft(db.current_database_path(), values)
     except (OSError, assignment_drafts.DraftError) as error:
         st.warning(f"草稿保存失败：{error}。重启前请先保留当前输入。")
         return False
@@ -3720,11 +3732,11 @@ def save_assignment_create_draft(values):
 
 def install_assignment_draft(values):
     """Fill a new draft; keep a recoverable copy of the previous saved draft."""
-    previous = assignment_drafts.load_draft(db.DB_PATH)
+    previous = assignment_drafts.load_draft(db.current_database_path())
     if previous:
-        archive = db.DB_PATH.resolve().with_suffix(".assignment_draft_backups")
+        archive = db.current_database_path().resolve().with_suffix(".assignment_draft_backups")
         write_json(archive / (datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".json"), previous)
-    assignment_drafts.save_draft(db.DB_PATH, values)
+    assignment_drafts.save_draft(db.current_database_path(), values)
     st.session_state.assignment_create_loaded_for = None
     st.session_state.pop("assignment_create_reset_requested", None)
 
@@ -4059,7 +4071,7 @@ def show_assignment_management():
                     st.error(f"保存实验失败：{error}")
                 else:
                     try:
-                        assignment_drafts.clear_draft(db.DB_PATH)
+                        assignment_drafts.clear_draft(db.current_database_path())
                     except OSError:
                         st.warning("实验已发布，但旧草稿未能清理，请避免重复发布。")
                     st.session_state.assignment_create_reset_requested = True
@@ -5541,13 +5553,13 @@ def render_ai_benchmark():
         else:
             st.caption("选择排序重点复测每轮3条；复杂代码每轮18条，覆盖树遍历、图搜索、动态规划的答辩解释与代码初评。")
         try:
-            run = evaluation_benchmark.load_latest(db.DB_PATH)
+            run = evaluation_benchmark.load_latest(db.current_database_path())
         except (OSError, ValueError) as error:
             st.error("无法读取对照记录：" + str(error))
             return
         if st.button("新建对照记录", key="benchmark_new", disabled=demo_mode.demo_read_only()):
             try:
-                evaluation_benchmark.create_run(db.DB_PATH, metadata, repeats, scope)
+                evaluation_benchmark.create_run(db.current_database_path(), metadata, repeats, scope)
             except (OSError, ValueError) as error:
                 st.error(str(error))
             else:
@@ -5568,7 +5580,7 @@ def render_ai_benchmark():
         if st.button("运行／继续真实AI对照", key="benchmark_run",
                      disabled=demo_mode.demo_read_only() or not llm.is_configured() or not compatible or done):
             try:
-                run = run or evaluation_benchmark.create_run(db.DB_PATH, metadata, repeats, scope)
+                run = run or evaluation_benchmark.create_run(db.current_database_path(), metadata, repeats, scope)
                 with evaluation_benchmark.claim(run["id"]):
                     operation = ai_workflow.Operation()
                     timer = st.empty()
@@ -5585,12 +5597,12 @@ def render_ai_benchmark():
                                 lambda elapsed, left: timer.caption(f"本批次已等待 {elapsed:.0f} 秒 · 剩余预算 {left:.0f} 秒"))
                             run["results"][item["id"]] = {"evaluation": result, "seconds": round(time.monotonic() - started, 2)}
                             run["failed_item"] = ""
-                            evaluation_benchmark.save_run(db.DB_PATH, run)
+                            evaluation_benchmark.save_run(db.current_database_path(), run)
                             saved_counter.caption(f"已保存 {len(run['results'])}/{len(run['plan'])} 条真实评价 · 记录 {run['created_at'].replace('T', ' ')}")
                             saved_progress.progress(len(run["results"]) / len(run["plan"]))
                         except (llm.LLMServiceError, ai_workflow.WorkflowError):
                             run["failed_item"] = item["id"]
-                            evaluation_benchmark.save_run(db.DB_PATH, run)
+                            evaluation_benchmark.save_run(db.current_database_path(), run)
                             raise
             except (llm.LLMServiceError, ai_workflow.WorkflowError, OSError, ValueError) as error:
                 st.error("对照未全部完成：" + str(error))
@@ -5879,12 +5891,13 @@ def show_sidebar():
     with st.sidebar:
         render_brand_lockup(compact=True)
         st.caption(
-            "v1.4 · 赛事只读Demo"
-            if demo_mode.demo_mode_enabled()
-            else "v1.4 · 完整本地版"
+            "v1.4 · 交互Demo（案例回放）" if demo_playback.active() else
+            ("v1.4 · 赛事只读Demo" if demo_mode.demo_mode_enabled() else "v1.4 · 完整本地版")
         )
         st.caption("不止评代码，更要评理解")
         st.caption("已内置 LearnBuddy 技能与只读连接器适配包")
+        if demo_playback.active():
+            st.success("独立合成数据空间\n\n可保存操作 · AI与判题回放")
         if demo_mode.demo_mode_enabled():
             st.success("赛事在线Demo\n\n合成数据 · 安全浏览")
         if st.session_state.auth_role == "学生":
@@ -5904,7 +5917,7 @@ def show_sidebar():
                 mapping = {c["id"]: c["name"] for c in classes}
                 def change_class():
                     for key in list(st.session_state):
-                        if key.startswith(("auth_", "form_", "nav_")) or key in {"current_page", "selected_class_id", "_browser_request"}:
+                        if key.startswith(("auth_", "form_", "nav_")) or key in {"current_page", "selected_class_id", "_browser_request", "_interactive_workspace", "_interactive_case"}:
                             continue
                         del st.session_state[key]
                 selected = st.selectbox("当前班级", list(mapping), format_func=mapping.get,
@@ -5941,7 +5954,9 @@ def show_sidebar():
 
         st.divider()
         if st.session_state.auth_role == "教师":
-            if demo_mode.demo_mode_enabled():
+            if demo_playback.active():
+                st.info("在线AI与判题为固定案例回放；完整本地版支持真实模型与代码执行。")
+            elif demo_mode.demo_mode_enabled():
                 st.info("赛事只读Demo无需模型密钥，不调用模型服务，也不执行学生代码。")
             elif llm.is_configured():
                 st.success(f"网页AI评价服务：{llm.provider_name()} / {llm.model_name()}")
@@ -5970,7 +5985,7 @@ def show_sidebar():
             else:
                 st.caption(f"代码验证：{runtime['label']}；{runtime['detail']}")
             st.caption(f"当前账号可见 {len(db.list_submissions())} 条提交记录")
-            st.caption(f"数据源标识：{runtime_config.database_id(db.DB_PATH)}")
+            st.caption(f"数据源标识：{runtime_config.database_id(db.current_database_path())}")
         elif st.session_state.auth_role == "管理员":
             st.caption("账号与系统管理工作区")
         elif st.session_state.submission_id is None:
@@ -6475,7 +6490,7 @@ def main():
     )
     if demo_mode.demo_mode_enabled():
         try:
-            demo_mode.prepare_demo_database(db.DB_PATH)
+            demo_mode.prepare_demo_database(db.current_database_path())
         except (demo_mode.DemoDatabaseError, sqlite3.Error, OSError) as error:
             st.error(f"Demo启动已停止：{error}")
             st.info("请使用 launch.py --mode demo 指定新的独立数据库，或以 local 模式启动完整本地版。")
@@ -6494,7 +6509,7 @@ def main():
                 init_state()
                 st.session_state["_browser_expired_message"] = True
             if st.session_state.get("_browser_clear_pending"):
-                browser_session.exchange(db.DB_PATH, "clear")
+                browser_session.exchange(db.current_database_path(), "clear")
                 if st.session_state.get("_browser_clear_pending") and not st.session_state.get("_browser_storage_blocked"):
                     render_brand_lockup()
                     st.caption("正在更新登录状态，请稍候。")
@@ -6502,7 +6517,7 @@ def main():
             elif not st.session_state.get("_role_split_completed") and not st.session_state.get("_browser_read_completed"):
                 # The upgrade revoked the old token and requested its removal.
                 # Do not start another restore callback while the owner signs in.
-                saved = browser_session.exchange(db.DB_PATH, "read")
+                saved = browser_session.exchange(db.current_database_path(), "read")
                 if saved:
                     restored = accounts.session(saved["token"])
                     if restored:
@@ -6526,13 +6541,13 @@ def main():
             account_ui.password_form(actor, required=True)
             if st.button("退出登录"):
                 logout()
-            browser_session.exchange(db.DB_PATH, "write", st.session_state.auth_token, browser_session.capture_view())
+            browser_session.exchange(db.current_database_path(), "write", st.session_state.auth_token, browser_session.capture_view())
             return
         if accounts.needs_role_split(actor):
             account_ui.role_split_form(actor)
             if st.button("退出登录"):
                 logout()
-            browser_session.exchange(db.DB_PATH, "write", st.session_state.auth_token, {})
+            browser_session.exchange(db.current_database_path(), "write", st.session_state.auth_token, {})
             return
         if st.session_state.current_page == "系统设置":
             st.session_state.current_page = "账号与系统管理" if actor['role']=='admin' else "班级与学生管理"
@@ -6548,7 +6563,7 @@ def main():
         except PermissionError as error:
             st.error(str(error))
             st.caption("请返回首页或重新登录；权限校验未修改其他班级的数据。")
-        browser_session.exchange(db.DB_PATH, "write", st.session_state.auth_token, browser_session.capture_view())
+        browser_session.exchange(db.current_database_path(), "write", st.session_state.auth_token, browser_session.capture_view())
         return
     if st.session_state.auth_role not in {"学生", "教师"}:
         show_login()

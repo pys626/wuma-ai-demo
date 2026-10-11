@@ -23,7 +23,7 @@ from openai import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
-if not runtime_config.demo_mode_enabled():
+if not runtime_config.demo_mode_enabled() and os.getenv("WUMA_INTERACTIVE_DEMO") != "true":
     load_dotenv(BASE_DIR / ".env")
 
 

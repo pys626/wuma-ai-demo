@@ -19,6 +19,8 @@ def storage_key(database):
 
 def clear_state():
     for key in list(st.session_state):
+        if key == "_interactive_workspace":
+            continue
         del st.session_state[key]
     st.session_state["_browser_clear_pending"] = True
     # Explicit logout must finish clearing, then stay on the login form.

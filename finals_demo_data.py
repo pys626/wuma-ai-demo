@@ -12,7 +12,7 @@ _LOCK = threading.Lock()
 FIXTURE = Path(__file__).resolve().parent / "demo_assets/finals_cases.json"
 
 def seed_finals_cases():
-    demo_mode.validate_demo_database(db.DB_PATH)
+    demo_mode.validate_demo_database(db.current_database_path())
     with _LOCK:
         with db.get_connection() as connection:
             marker = connection.execute("SELECT value FROM wuma_demo_metadata WHERE key='finals_case_set'").fetchone()

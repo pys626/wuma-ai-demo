@@ -20,12 +20,13 @@ from pathlib import Path
 
 import runtime_config
 import execution_guard
+import demo_playback
 
 from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent
-if not runtime_config.demo_mode_enabled():
+if not runtime_config.demo_mode_enabled() and os.getenv("WUMA_INTERACTIVE_DEMO") != "true":
     load_dotenv(BASE_DIR / ".env")
 
 
@@ -101,7 +102,7 @@ def _env_flag(name, default=False):
 
 def execution_enabled():
     """是否允许执行学生代码；默认关闭。"""
-    return not runtime_config.demo_mode_enabled() and _env_flag("CODE_EXECUTION_ENABLED", False)
+    return not demo_playback.active() and not runtime_config.demo_mode_enabled() and _env_flag("CODE_EXECUTION_ENABLED", False)
 
 
 def compiler_name():
@@ -1534,12 +1535,16 @@ def get_execution_backend():
 
 
 def runtime_status():
+    if demo_playback.active():
+        return {"available": False, "label": "固定案例评测证据回放", "detail": "在线不执行任意代码；可在实验提交页载入本例已保存的真实判题结果。"}
     if runtime_config.demo_mode_enabled():
         return {"available": False, "label": "赛事Demo已关闭代码执行", "detail": "请使用完整本地版进行真实判题。"}
     return get_execution_backend().runtime_status()
 
 
 def verify_cpp_code(code, test_cases, cpp_standard="auto"):
+    if demo_playback.active():
+        return demo_playback.verification(code, test_cases, cpp_standard)
     if runtime_config.demo_mode_enabled():
         return _base_result("未启用", "赛事只读Demo不执行学生代码。", compiler_name(), cpp_standard)
     if any(len(str(case.get("input", ""))) > MAX_CUSTOM_INPUT_CHARS for case in test_cases):
@@ -1556,6 +1561,8 @@ def verify_cpp_code(code, test_cases, cpp_standard="auto"):
 
 
 def run_cpp_code(code, standard_input="", cpp_standard="auto"):
+    if demo_playback.active():
+        return _base_result("未执行", "在线固定案例演示不运行任意代码，请使用完整本地版。", "未执行", cpp_standard)
     if runtime_config.demo_mode_enabled():
         return _base_result("未启用", "赛事只读Demo不执行学生代码。", compiler_name(), cpp_standard)
     if len(str(standard_input or "")) > MAX_CUSTOM_INPUT_CHARS:

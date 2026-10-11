@@ -273,7 +273,7 @@ def ensure_demo_data(force=False):
     """Seed deterministic synthetic records only for an empty demo database."""
     if not demo_mode_enabled() and not force:
         return False
-    validate_demo_database(db.DB_PATH)
+    validate_demo_database(db.current_database_path())
     with _SEED_LOCK:
         if db.list_submissions():
             return False
