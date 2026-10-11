@@ -3,7 +3,6 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime
 from pathlib import Path
 
 
@@ -17,6 +16,7 @@ import runtime_config  # noqa: E402
 import demo_mode  # noqa: E402
 import accounts  # noqa: E402
 import access_control  # noqa: E402
+from app_clock import now_beijing  # noqa: E402
 from contextlib import nullcontext
 
 
@@ -37,7 +37,7 @@ def data_snapshot(records):
     return {
         "数据源标识": runtime_config.database_id(db.DB_PATH),
         "运行模式": "赛事只读Demo" if runtime_config.demo_mode_enabled() else "完整本地版",
-        "读取时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "读取时间": now_beijing().strftime("%Y-%m-%d %H:%M:%S"),
         "最新提交编号": max(ids) if ids else None,
     }
 

@@ -1,6 +1,6 @@
 """Bounded model waits and reusable, input-specific results; no worker writes to DB/UI."""
 from contextvars import copy_context
-from datetime import datetime
+from app_clock import now_beijing
 import queue
 import threading
 import time
@@ -87,7 +87,7 @@ class Checkpoint:
         self._save()
 
     def _save(self):
-        self.document["saved_at"] = datetime.now().isoformat(timespec="seconds")
+        self.document["saved_at"] = now_beijing().isoformat(timespec="seconds")
         write_json(self.path, self.document)
 
     def clear(self):

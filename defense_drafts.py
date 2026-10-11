@@ -1,5 +1,5 @@
 """Save a single answer draft without changing official answer/evaluation records."""
-from datetime import datetime
+from app_clock import now_beijing
 
 from local_store import fingerprint, read_json, scoped_path, write_json
 
@@ -31,7 +31,7 @@ def save(database, student_id, submission_id, question_index, stage, question, a
     if not isinstance(answer, str) or len(answer) > 100000:
         raise ValueError("答辩回答必须为不超过10万字的文本。")
     document = {"version": 1, "identity": identity(student_id, submission_id, question_index, stage, question),
-                "answer": answer, "saved_at": datetime.now().isoformat(timespec="seconds")}
+                "answer": answer, "saved_at": now_beijing().isoformat(timespec="seconds")}
     write_json(path(database, student_id, submission_id, question_index, stage, question), document)
     return document
 

@@ -1,6 +1,6 @@
 """Persist the teacher's unfinished experiment without storing session secrets."""
 
-from datetime import datetime
+from app_clock import now_beijing
 import json
 import hashlib
 import math
@@ -60,7 +60,7 @@ def save_draft(database_path, values):
         raise DraftError("草稿内容格式不正确。")
     document = {
         "version": 1,
-        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "saved_at": now_beijing().isoformat(timespec="seconds"),
         "data": {key: _plain(value) for key, value in values.items() if key in DRAFT_FIELDS},
     }
     encoded = json.dumps(document, ensure_ascii=False, allow_nan=False, indent=2) + "\n"

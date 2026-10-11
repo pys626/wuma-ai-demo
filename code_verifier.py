@@ -15,7 +15,7 @@ import tempfile
 import time
 import uuid
 import threading
-from datetime import datetime
+from app_clock import now_beijing
 from pathlib import Path
 
 import runtime_config
@@ -421,7 +421,7 @@ def _base_result(status, message, compiler, requested_standard="auto"):
         "max_score": 0,
         "group_scores": [],
         "cases": [],
-        "executed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "executed_at": now_beijing().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 

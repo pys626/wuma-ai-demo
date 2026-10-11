@@ -1,6 +1,6 @@
 """Save only a student's editable submission, scoped to database/student/experiment."""
 
-from datetime import datetime
+from app_clock import now_beijing
 import hashlib
 import json
 import os
@@ -54,7 +54,7 @@ def save_draft(database, student_id, assignment_id, values, assignment_updated_a
     path.parent.mkdir(parents=True, exist_ok=True)
     document = {"version": 1, "student_id": str(student_id).strip(), "assignment_id": assignment_id,
                 "assignment_updated_at": str(assignment_updated_at),
-                "saved_at": datetime.now().isoformat(timespec="seconds"), "data": data}
+                "saved_at": now_beijing().isoformat(timespec="seconds"), "data": data}
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,

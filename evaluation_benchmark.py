@@ -1,6 +1,6 @@
 """Fixed synthetic cases for real-model comparison; separate from student records."""
 from contextlib import contextmanager
-from datetime import datetime
+from app_clock import now_beijing
 import json
 from pathlib import Path
 import threading
@@ -168,7 +168,7 @@ def create_run(database, metadata, repeats=1, scope="all"):
     fixture_version = ("dijkstra_premise_comparison_v1" if scope == "dijkstra_premise" else FIXTURE_VERSION)
     run = {"version": 1, "id": uuid.uuid4().hex, "fixture_version": fixture_version,
            "plan_hash": fingerprint(plan), "model": dict(metadata), "repeats": repeats, "scope": scope,
-           "created_at": datetime.now().isoformat(timespec="seconds"), "plan": plan,
+           "created_at": now_beijing().isoformat(timespec="seconds"), "plan": plan,
            "results": {}, "failed_item": ""}
     save_run(database, run)
     write_json(folder(database) / "latest.json", {"id": run["id"]})

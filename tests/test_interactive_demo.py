@@ -1,4 +1,5 @@
 import concurrent.futures
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import shutil
@@ -153,3 +154,41 @@ class InteractiveDemoTests(unittest.TestCase):
         self.click(page, '学生报告')
         self.assertEqual(page.session_state.submission_id, 1)
         self.assertTrue(any('私有演示空间的复核意见' in item.value for item in page.info))
+
+    def test_review_uses_beijing_time_and_survives_logout_roundtrip(self):
+        page = self.page()
+        workspace = page.session_state[interactive_demo.KEY]
+        self.click(page, '体验学生甲端')
+        self.click(page, '学生报告')
+        self.click(page, '退出登录')
+        self.assertEqual(page.session_state[interactive_demo.KEY], workspace)
+        self.click(page, '体验教师端')
+        self.click(page, '教师工作台')
+        next(item for item in page.selectbox if item.label == '筛选学生状态').select('全部记录').run(timeout=20)
+        selector = next(item for item in page.selectbox if item.label == '选择要处理的提交')
+        selector.select(next(option for option in selector.options if '提交编号：1 ·' in option)).run(timeout=20)
+        comment = '北京时间复核验收'
+        next(item for item in page.text_area if item.label == '教师复核意见（选填）').set_value(comment)
+
+        class UTCServerClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                value = datetime(2026, 10, 11, 13, 49, tzinfo=timezone.utc)
+                return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+
+        with patch('app_clock.datetime', UTCServerClock):
+            self.click(page, '保存教师复核')
+        with db.database_scope(workspace['path']):
+            review = db.get_teacher_review(1)
+            self.assertEqual(review['comment'], comment)
+            self.assertEqual(review['reviewed_at'], '2026-10-11 21:49')
+            with patch('app_clock.datetime', UTCServerClock):
+                db.save_teacher_review(1, '演示教师', '认可AI诊断', 100, comment)
+            self.assertEqual(db.get_teacher_review(1)['reviewed_at'], '2026-10-11 21:49')
+        self.click(page, '退出登录')
+        self.assertEqual(page.session_state[interactive_demo.KEY], workspace)
+        self.click(page, '体验学生甲端')
+        self.click(page, '学生报告')
+        self.assertEqual(page.session_state.submission_id, 1)
+        self.assertTrue(any(comment in item.value for item in page.info))
+        self.assertTrue(any('复核时间：2026-10-11 21:49' in item.value for item in page.caption))

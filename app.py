@@ -1,4 +1,5 @@
 from datetime import datetime
+from app_clock import now_beijing
 from pathlib import Path
 import hashlib
 import json
@@ -852,7 +853,7 @@ def finalize_report(operation=None):
     db.save_report(
         st.session_state.submission_id,
         report,
-        datetime.now().strftime("%Y-%m-%d %H:%M"),
+        now_beijing().strftime("%Y-%m-%d %H:%M"),
     )
     st.session_state.report = report
     st.session_state.report_error = ""
@@ -949,7 +950,7 @@ def start_or_resume_redefense(submission, request):
         new_submission_id = db.start_redefense(
             request["id"],
             questions,
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            now_beijing().strftime("%Y-%m-%d %H:%M"),
         )
     load_submission_session(new_submission_id)
     set_flash(
@@ -1070,7 +1071,7 @@ def format_waiting_duration(created_at):
         started = datetime.strptime(created_at, "%Y-%m-%d %H:%M")
     except (TypeError, ValueError):
         return "等待时长未知"
-    minutes = max(0, int((datetime.now() - started).total_seconds() // 60))
+    minutes = max(0, int((now_beijing() - started).total_seconds() // 60))
     if minutes < 60:
         return f"已等待{minutes}分钟"
     hours = minutes // 60
@@ -1105,7 +1106,7 @@ def open_student_task(task):
         db.mark_student_feedback_viewed(
             task["feedback_id"],
             submission["student_id"],
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            now_beijing().strftime("%Y-%m-%d %H:%M"),
         )
         set_flash("已打开教师回复，对应提醒已自动完成。")
     navigate("学生报告")
@@ -2176,7 +2177,7 @@ def show_submission():
                 constraints_text=assignment.get("constraints_text", ""),
                 explanation_required=assignment.get("explanation_required", True),
             ))
-            submitted_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+            submitted_at = now_beijing().strftime("%Y-%m-%d %H:%M")
             submission_id = db.create_submission_with_questions(
                 student_id.strip(),
                 name.strip(),
@@ -2886,7 +2887,7 @@ def render_student_feedback_form(submission_id):
                 category,
                 feedback_content,
                 reply_requested,
-                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                now_beijing().strftime("%Y-%m-%d %H:%M"),
             )
         except (ValueError, sqlite3.Error) as error:
             st.error(f"提交反馈失败：{error}")
@@ -2996,7 +2997,7 @@ def show_report():
             db.mark_student_feedback_viewed(
                 feedback["id"],
                 submission["student_id"],
-                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                now_beijing().strftime("%Y-%m-%d %H:%M"),
             )
     focused_feedback_id = st.session_state.get("student_task_feedback_id")
     if focused_feedback_id is not None:
@@ -3735,7 +3736,7 @@ def install_assignment_draft(values):
     previous = assignment_drafts.load_draft(db.current_database_path())
     if previous:
         archive = db.current_database_path().resolve().with_suffix(".assignment_draft_backups")
-        write_json(archive / (datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".json"), previous)
+        write_json(archive / (now_beijing().strftime("%Y%m%d_%H%M%S_%f") + ".json"), previous)
     assignment_drafts.save_draft(db.current_database_path(), values)
     st.session_state.assignment_create_loaded_for = None
     st.session_state.pop("assignment_create_reset_requested", None)
@@ -5223,7 +5224,7 @@ def render_teacher_review_actions(selected_id, report, review_history):
                 decision,
                 confirmed_overall,
                 teacher_comment,
-                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                now_beijing().strftime("%Y-%m-%d %H:%M"),
             )
         except (ValueError, sqlite3.Error) as error:
             st.error(f"保存复核失败：{error}")
@@ -5321,7 +5322,7 @@ def render_teacher_feedback_actions(student_feedbacks, focused_feedback_id=None)
                         feedback_teacher,
                         feedback_action,
                         feedback_reply,
-                        datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        now_beijing().strftime("%Y-%m-%d %H:%M"),
                     )
                 except (ValueError, sqlite3.Error) as error:
                     st.error(f"保存反馈处理失败：{error}")

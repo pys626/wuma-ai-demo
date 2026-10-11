@@ -5,7 +5,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from app_clock import now_beijing
 from pathlib import Path
 
 import runtime_config
@@ -531,7 +531,7 @@ def _seed_default_assignment(connection):
         "SELECT COUNT(*) AS amount FROM assignments"
     ).fetchone()["amount"]
     if count == 0:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        now = now_beijing().strftime("%Y-%m-%d %H:%M")
         cursor = connection.execute(
             """
             INSERT INTO assignments (
@@ -1183,7 +1183,7 @@ def create_assignment(
     rubric_reviewed = bool(rubric_reviewed)
     if verification_enabled and not reference_code.strip():
         raise ValueError("启用代码验证时必须填写教师参考答案。")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -1274,7 +1274,7 @@ def update_assignment(
     rubric_reviewed = bool(rubric_reviewed)
     if verification_enabled and not reference_code.strip():
         raise ValueError("启用代码验证时必须填写教师参考答案。")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         connection.execute(
             """
@@ -1339,7 +1339,7 @@ def set_assignment_status(assignment_id, status):
     """发布或停用实验；停用不会删除历史提交。"""
     if status not in {"已发布", "已停用"}:
         raise ValueError("实验状态只能是“已发布”或“已停用”。")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         connection.execute(
             """
@@ -1473,7 +1473,7 @@ def save_ai_hint(
                 str(verdict_status).strip()[:40],
                 hashlib.sha256(str(code).encode("utf-8")).hexdigest(),
                 json.dumps(hint, ensure_ascii=False),
-                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                now_beijing().strftime("%Y-%m-%d %H:%M"),
             ),
         )
         return cursor.lastrowid, hint_number
@@ -1598,7 +1598,7 @@ def _upsert_preliminary_review(connection, submission_id, review, created_at):
 
 def save_preliminary_review(submission_id, review, created_at=None):
     """单独保存或更新一次按评分点生成的实验完成度初评。"""
-    created_at = created_at or datetime.now().strftime("%Y-%m-%d %H:%M")
+    created_at = created_at or now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         _upsert_preliminary_review(connection, submission_id, review, created_at)
 
@@ -1770,7 +1770,7 @@ def save_teacher_review(
             raise ValueError("教师确认理解度必须是0至100的数字。") from error
         if not 0 <= confirmed_overall <= 100:
             raise ValueError("教师确认理解度必须在0至100之间。")
-    reviewed_at = reviewed_at or datetime.now().strftime("%Y-%m-%d %H:%M")
+    reviewed_at = reviewed_at or now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         report = connection.execute(
             "SELECT id, overall FROM reports WHERE submission_id = ?",
@@ -1904,7 +1904,7 @@ def start_redefense(request_id, questions, started_at=None):
     """根据教师要求创建一次关联原提交的新答辩，重复点击时复用已有记录。"""
     if not questions:
         raise ValueError("重新答辩问题不能为空。")
-    started_at = started_at or datetime.now().strftime("%Y-%m-%d %H:%M")
+    started_at = started_at or now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         request = connection.execute(
             """
@@ -2023,7 +2023,7 @@ def save_student_feedback(
     if len(content) > 1000:
         raise ValueError("反馈内容不能超过1000个字符。")
 
-    created_at = created_at or datetime.now().strftime("%Y-%m-%d %H:%M")
+    created_at = created_at or now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         submission = connection.execute(
             "SELECT status FROM submissions WHERE id = ?",
@@ -2089,7 +2089,7 @@ def process_student_feedback(
     if len(teacher_reply) > 1000:
         raise ValueError("教师回复不能超过1000个字符。")
 
-    replied_at = replied_at or datetime.now().strftime("%Y-%m-%d %H:%M")
+    replied_at = replied_at or now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         exists = connection.execute(
             "SELECT id FROM student_feedbacks WHERE id = ?",
@@ -2121,7 +2121,7 @@ def process_student_feedback(
 def mark_student_feedback_viewed(feedback_id, student_id, viewed_at=None):
     """学生查看教师回复后记录时间，让对应提醒自动完成。"""
     student_id = str(student_id).strip()
-    viewed_at = viewed_at or datetime.now().strftime("%Y-%m-%d %H:%M")
+    viewed_at = viewed_at or now_beijing().strftime("%Y-%m-%d %H:%M")
     with get_connection() as connection:
         feedback = connection.execute(
             """
