@@ -24,7 +24,9 @@ class InteractiveDemoTests(unittest.TestCase):
 
     def tearDown(self):
         self.env.stop()
-        for workspace in self.workspaces:
+        for workspace in {item['path']: item for item in self.workspaces}.values():
+            if not Path(workspace['path']).exists():
+                continue
             folder = interactive_demo.validate_workspace(workspace).parent
             shutil.rmtree(folder)
 
@@ -33,8 +35,10 @@ class InteractiveDemoTests(unittest.TestCase):
         self.workspaces.append(workspace)
         return workspace
 
-    def page(self):
-        page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'competition_demo.py')).run(timeout=20)
+    def page(self, query_params=None):
+        page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'competition_demo.py'))
+        page.query_params.update(query_params or {})
+        page.run(timeout=20)
         self.assertEqual(len(page.exception), 0)
         self.workspaces.append(page.session_state[interactive_demo.KEY])
         return page
@@ -155,6 +159,81 @@ class InteractiveDemoTests(unittest.TestCase):
         self.assertEqual(page.session_state.submission_id, 1)
         self.assertTrue(any('私有演示空间的复核意见' in item.value for item in page.info))
 
+    def test_saved_review_survives_lost_session_using_same_demo_link(self):
+        page = self.page()
+        self.click(page, '体验教师端')
+        self.click(page, '教师工作台')
+        next(item for item in page.selectbox if item.label == '筛选学生状态').select('全部记录').run(timeout=20)
+        selector = next(item for item in page.selectbox if item.label == '选择要处理的提交')
+        selector.select(next(option for option in selector.options if '提交编号：1 ·' in option)).run(timeout=20)
+        next(item for item in page.text_area if item.label == '教师复核意见（选填）').set_value('刷新后仍应显示的新意见')
+        self.click(page, '保存教师复核')
+        original_workspace = page.session_state[interactive_demo.KEY]
+        refreshed = self.page(dict(page.query_params))
+        self.click(refreshed, '体验学生甲端')
+        self.click(refreshed, '学生报告')
+        self.assertTrue(any('刷新后仍应显示的新意见' in item.value for item in refreshed.info))
+        self.assertEqual(refreshed.session_state[interactive_demo.KEY]['path'], original_workspace['path'])
+
+    def test_teacher_role_switch_opens_selected_older_submission(self):
+        page = self.page()
+        workspace = page.session_state[interactive_demo.KEY]
+        fixture = demo_playback.fixture()
+        case = fixture['cases'][0]
+        with db.database_scope(workspace['path']):
+            assignment = next(row for row in db.list_assignments() if row['title'] == fixture['assignment']['title'])
+            questions = [{'dimension': qa['dimension'], 'question': qa['question'],
+                          'reference_points': qa['reference_points'], 'reason': qa.get('question_reason', '')}
+                         for qa in case['qa']]
+            newer_id = db.create_submission_with_questions('20260001', '案例学生甲', assignment['title'], '',
+                        fixture['code'], '2026-10-11 22:00', questions, assignment=assignment)
+            db.save_report(newer_id, case['report'], '2026-10-11 22:01')
+        self.assertGreater(newer_id, 1)
+        self.click(page, '体验教师端')
+        self.click(page, '教师工作台')
+        next(item for item in page.selectbox if item.label == '筛选学生状态').select('全部记录').run(timeout=20)
+        selector = next(item for item in page.selectbox if item.label == '选择要处理的提交')
+        selector.select(next(option for option in selector.options if '提交编号：1 ·' in option)).run(timeout=20)
+        next(item for item in page.text_area if item.label == '教师复核意见（选填）').set_value('旧提交的新复核意见')
+        self.click(page, '保存教师复核')
+        self.click(page, '切换到学生甲')
+        self.click(page, '学生报告')
+        self.assertEqual(page.session_state.submission_id, 1)
+        self.assertTrue(any('旧提交的新复核意见' in item.value for item in page.info))
+
+    def test_resume_handles_keep_visitors_separate_and_reject_invalid_or_expired_handles(self):
+        left, right = self.workspace(), self.workspace()
+        self.assertNotEqual(left['resume_token'], right['resume_token'])
+        self.assertEqual(interactive_demo.restore_workspace(left['resume_token'])['path'], left['path'])
+        self.assertEqual(interactive_demo.restore_workspace(right['resume_token'])['path'], right['path'])
+        for invalid in ['../../outside', '', 'a' * 44, left['resume_token'] + '/..']:
+            self.assertIsNone(interactive_demo.restore_workspace(invalid))
+        with patch('interactive_demo.time.time', return_value=left['expires_at'] + 1):
+            self.assertIsNone(interactive_demo.restore_workspace(left['resume_token']))
+
+    def test_reset_invalidates_old_link_and_returns_explicit_new_space_notice(self):
+        page = self.page()
+        original_query = dict(page.query_params)
+        original = page.session_state[interactive_demo.KEY]
+        self.click(page, '恢复初始演示数据')
+        replacement = page.session_state[interactive_demo.KEY]
+        self.workspaces.append(replacement)
+        self.assertNotEqual(replacement['path'], original['path'])
+        self.assertIsNone(interactive_demo.restore_workspace(original['resume_token']))
+        expired_page = self.page(original_query)
+        self.assertTrue(any('已建立新的演示空间' in item.value for item in expired_page.warning))
+
+    def test_resumed_student_cannot_open_other_students_selected_report(self):
+        page = self.page()
+        self.click(page, '体验教师端')
+        self.click(page, '教师工作台')
+        next(item for item in page.selectbox if item.label == '筛选学生状态').select('全部记录').run(timeout=20)
+        selector = next(item for item in page.selectbox if item.label == '选择要处理的提交')
+        selector.select(next(option for option in selector.options if '提交编号：2 ·' in option)).run(timeout=20)
+        self.click(page, '切换到学生甲')
+        self.click(page, '学生报告')
+        self.assertEqual(page.session_state.submission_id, 1)
+
     def test_review_uses_beijing_time_and_survives_logout_roundtrip(self):
         page = self.page()
         workspace = page.session_state[interactive_demo.KEY]
@@ -186,7 +265,8 @@ class InteractiveDemoTests(unittest.TestCase):
                 db.save_teacher_review(1, '演示教师', '认可AI诊断', 100, comment)
             self.assertEqual(db.get_teacher_review(1)['reviewed_at'], '2026-10-11 21:49')
         self.click(page, '退出登录')
-        self.assertEqual(page.session_state[interactive_demo.KEY], workspace)
+        for key in ('path', 'password', 'resume_token'):
+            self.assertEqual(page.session_state[interactive_demo.KEY][key], workspace[key])
         self.click(page, '体验学生甲端')
         self.click(page, '学生报告')
         self.assertEqual(page.session_state.submission_id, 1)
