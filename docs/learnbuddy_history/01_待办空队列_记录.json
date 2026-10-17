@@ -1,0 +1,48 @@
+{
+  "case": "Teacher review preparation, empty current task queue",
+  "evidence_type": "User-provided screenshot of visible skill, call, return and final answer",
+  "screenshot": "D:\\AI_Coding\\wuma_ai_v1_3_16\\output\\LearnBuddy协作_20261010\\evidence\\01_待办空队列_20261010.png",
+  "screenshot_sha256": "6c17e8b670e07386421770b31c8f87ce56ee39c3b1ec001c8f0b20eb31efed28",
+  "source_pixels": [
+    1375,
+    2370
+  ],
+  "displayed_platform": "LearnBuddy",
+  "displayed_model": "Kimi-K3",
+  "displayed_elapsed": "1m21s",
+  "loaded_skill": "wuma-ai-teacher",
+  "visible_tool_calls": [
+    {
+      "name": "wuma_pending_teacher_tasks",
+      "parameters": {
+        "limit": 50
+      },
+      "visible_count": 1
+    }
+  ],
+  "snapshot": {
+    "source_id": "dbea4cd2c57d",
+    "mode": "完整本地版",
+    "read_at": "2026-10-10 12:48:45",
+    "latest_submission_id": 5
+  },
+  "observed_result": {
+    "teacher_task_queue_status": "空",
+    "task_count": 0,
+    "task_types": [],
+    "tasks": []
+  },
+  "observed_behavior": {
+    "loaded_teacher_skill": true,
+    "queried_current_tasks": true,
+    "did_not_select_historical_submission_as_current_task": true,
+    "no_diagnosis_or_progress_call_visible": true,
+    "reported_scope_and_snapshot": true
+  },
+  "supported_conclusion": "Correct empty-task branch in this observed run. Skill loading and pending-task choice are visible. Multi-tool review preparation remains untested in this run.",
+  "limits": [
+    "Request text is not visible in the screenshot. The prior prompt in this chat does not specify tool names; retain the actual sent request alongside this evidence before claiming automatic tool selection.",
+    "No per-submission review conclusion was queried. Empty queue alone does not establish that every student understood or that submission 5 completed re-defense.",
+    "The 2026-10-09 historical screenshot remains valid for that earlier snapshot; this record is a separate later run."
+  ]
+}

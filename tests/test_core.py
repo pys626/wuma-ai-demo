@@ -117,7 +117,7 @@ class ScoringTests(unittest.TestCase):
             "confidence": "高",
             "follow_up_question": "",
         }
-        with patch.object(llm, "_chat_json", return_value=fake_result):
+        with patch.object(llm, "_chat_json", side_effect=[{"status": "可评价", "premise_issue": "", "basis": "模拟核对题目前提。"}, fake_result]):
             result = llm.evaluate_initial_answer(
                 "求最大值",
                 "int max_value = arr[0];",
@@ -142,7 +142,7 @@ class ScoringTests(unittest.TestCase):
             "confidence": "高",
             "follow_up_question": "如果数组全部为负数，初始化为0会怎样？",
         }
-        with patch.object(llm, "_chat_json", return_value=fake_result):
+        with patch.object(llm, "_chat_json", side_effect=[{"status": "可评价", "premise_issue": "", "basis": "模拟核对题目前提。"}, fake_result]):
             result = llm.evaluate_initial_answer(
                 "求最大值",
                 "int max_value = arr[0];",
@@ -221,16 +221,19 @@ class ScoringTests(unittest.TestCase):
                 {
                     "question": "为什么max_value使用arr[0]初始化？",
                     "reference_points": ["来自真实元素", "适用于全负数"],
+                    "reference_dimensions": ["程序逻辑理解", "边界情况意识"],
                     "reason": "评分点“最大值初始化合理”要求答辩核验。",
                 },
                 {
                     "question": "当n为0时访问arr[0]会怎样？",
                     "reference_points": ["越界访问", "输入校验"],
+                    "reference_dimensions": ["边界情况意识", "边界情况意识"],
                     "reason": "初评缺少空输入证据。",
                 },
                 {
                     "question": "如何把程序改为求最小值？",
                     "reference_points": ["修改变量含义", "修改比较方向"],
+                    "reference_dimensions": ["分析与修改能力", "分析与修改能力"],
                     "reason": "修改能力无法从静态提交判断。",
                 },
             ]
@@ -288,7 +291,8 @@ class ScoringTests(unittest.TestCase):
             )
         prompt = mocked.call_args.args[0][1]["content"]
         self.assertIn('"overall_status": "部分通过"', prompt)
-        self.assertIn('"name": "全部负数"', prompt)
+        self.assertIn('"failure_types": {"未通过": 1}', prompt)
+        self.assertNotIn("全部负数", prompt)
 
 
 class DatabaseTests(unittest.TestCase):
@@ -1476,7 +1480,7 @@ class DatabaseTests(unittest.TestCase):
 
 
 class ReportTests(unittest.TestCase):
-    def test_report_scores_are_calibrated_and_review_reason_is_generated(self):
+    def test_legacy_unmapped_answers_do_not_fabricate_dimension_scores(self):
         qa_records = []
         scores = [90, 70, 50]
         for index, score in enumerate(scores):
@@ -1519,12 +1523,14 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(
             report["dimensions"],
             {
-                "程序逻辑理解": 89,
-                "关键概念掌握": 71,
-                "边界情况意识": 68,
-                "分析与修改能力": 52,
+                "程序逻辑理解": None,
+                "关键概念掌握": None,
+                "边界情况意识": None,
+                "分析与修改能力": None,
             },
         )
+        self.assertIsNone(report["overall"])
+        self.assertEqual(report["level"], "评价尚不完整")
         self.assertTrue(report["review_required"])
         self.assertIn("至少一道问题的理解度评分低于60", report["review_reasons"])
         self.assertIn("学生回答中仍存在明确错误认识", report["review_reasons"])

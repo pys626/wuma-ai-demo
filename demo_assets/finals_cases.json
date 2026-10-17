@@ -1,0 +1,1418 @@
+{
+  "synthetic": true,
+  "case_set": "finals-20261010",
+  "provenance": {
+    "source": "人工设计合成作答，通过作品正常模型接口取得并保存评价。",
+    "model": {
+      "provider": "DeepSeek",
+      "model": "deepseek-flash",
+      "evaluation_version": "v1.4-premise-validation-v4"
+    },
+    "live_requests": 26,
+    "display": "只读回放已保存结果，不重新请求模型，不代表真实学生效果或总体准确率。",
+    "case_b_reuse": "案例乙第一、三题复用同题同作答的已保存真实评价。"
+  },
+  "assignment": {
+    "id": 2,
+    "title": "选择排序：将整数数组按升序排列",
+    "description": "给定n个整数，请使用数组保存数据，并使用选择排序将它们按非递减顺序排列。\n选择排序每轮从尚未排序的部分找出最小元素，将它放到该部分的首位，然后继续处理剩余元素。要求自己实现查找和交换过程，不使用sort、stable_sort或其他排序算法代替选择排序。\n程序最后输出排序后的全部整数。重复元素必须完整保留，负数和零也应正确处理。",
+    "requirements": [
+      "使用C++编写完整程序，包含int main，并用容量不少于100的数组保存数据。",
+      "自行实现选择排序，不调用sort、stable_sort，不用冒泡排序或插入排序替代。",
+      "每轮在未排序区间找到最小元素的下标，再将该元素与未排序区间首元素交换。",
+      "读入、排序和输出均只访问有效下标，能处理n=1、n=2、已排序、逆序和重复值。",
+      "输出全部n个整数，保证非递减、重复值数量不变且格式符合要求。",
+      "填写解题思路，说明minIndex的含义、两层循环范围和每轮交换的作用。",
+      "实验报告为选做，可补充排序过程、测试情况、复杂度和稳定性分析。"
+    ],
+    "teaching_focus": [
+      "第1题结合minIndex=i以及j=i+1解释未排序区间候选与已排序前缀。",
+      "第2题围绕temp保留被覆盖原值的交换机制，以及n=1时外层i<n-1的循环行为。",
+      "第3题将本实现改为降序，解释比较方向及比较次数、辅助空间是否改变。"
+    ],
+    "rubric": [
+      {
+        "name": "未排序区间最小元素选择",
+        "weight": 30,
+        "source": "代码＋答辩",
+        "description": "自行实现选择排序；每轮minIndex从i初始化，比较未排序元素并保存最小值下标，不以其他排序算法替代。",
+        "must_defend": true
+      },
+      {
+        "name": "循环范围与排序过程",
+        "weight": 20,
+        "source": "代码＋答辩",
+        "description": "两层循环不越界、不漏比较；能说明已排序前缀和未排序后缀，以及n-1轮后最后元素自然就位。",
+        "must_defend": true
+      },
+      {
+        "name": "交换操作与元素保留",
+        "weight": 15,
+        "source": "代码＋答辩",
+        "description": "查找本轮最小元素后正确交换，避免赋值覆盖；所有元素及重复值数量保持不变。",
+        "must_defend": true
+      },
+      {
+        "name": "输入输出与合法边界",
+        "weight": 20,
+        "source": "代码＋实验报告＋答辩",
+        "description": "正确处理单元素、双元素、已排序、逆序、重复值和负数；输出格式正确；不因未交选做报告本身扣分。",
+        "must_defend": false
+      },
+      {
+        "name": "复杂度分析与需求修改",
+        "weight": 15,
+        "source": "代码＋答辩",
+        "description": "说明标准实现时间O(n²)、辅助空间O(1)，并能解释改为降序所需的比较方向变化。",
+        "must_defend": true
+      }
+    ],
+    "input_format": "第一行输入一个整数n，表示数组元素个数。\n接下来输入n个整数，整数之间用空格或换行分隔。\n每次运行只处理一组数据。",
+    "output_format": "在一行输出排序后的n个整数，按非递减顺序排列，相邻两个整数之间恰好一个空格，最后换行。\n非递减顺序指前面的数不大于后面的数，允许相邻元素相等。\n不要输出输入提示、说明文字或每轮排序的中间结果。",
+    "constraints_text": "1 ≤ n ≤ 100。\n-1000000000 ≤ ai ≤ 1000000000，所有输入均为整数。\n输入保证包含完整的n个整数；允许负数、零和重复值。\n只要求按数值正确排列并保留所有元素，不要求排序稳定性。\nn=0、n>100和输入不完整不在正式判题范围内；如讨论这些情况，应明确属于可选健壮性扩展。",
+    "public_samples": [
+      {
+        "name": "一般排序",
+        "input": "5\n64 25 12 22 11\n",
+        "output": "11 12 22 25 64\n",
+        "explanation": "5个整数按升序排列后为11、12、22、25、64。"
+      },
+      {
+        "name": "负数与重复值",
+        "input": "6\n-3 0 -3 5 2 0\n",
+        "output": "-3 -3 0 0 2 5\n",
+        "explanation": "负数排在零前，相同的-3和0都要保留两次。"
+      },
+      {
+        "name": "单个元素",
+        "input": "1\n7\n",
+        "output": "7\n",
+        "explanation": "只有一个元素，不需要比较或交换，原样输出。"
+      }
+    ],
+    "cpp_standard": "auto",
+    "verification_enabled": true,
+    "test_cases": [
+      {
+        "name": "普通无序数组",
+        "group": "基础功能",
+        "weight": 0,
+        "input": "7\n12 5 9 1 20 6 3\n",
+        "expected_output": "1 3 5 6 9 12 20\n",
+        "count_only": true
+      },
+      {
+        "name": "已经有序",
+        "group": "基础功能",
+        "weight": 0,
+        "input": "6\n-5 -2 0 3 7 11\n",
+        "expected_output": "-5 -2 0 3 7 11\n",
+        "count_only": true
+      },
+      {
+        "name": "完全逆序",
+        "group": "基础功能",
+        "weight": 0,
+        "input": "7\n9 7 5 3 1 -1 -3\n",
+        "expected_output": "-3 -1 1 3 5 7 9\n",
+        "count_only": true
+      },
+      {
+        "name": "重复值保留",
+        "group": "边界情况",
+        "weight": 0,
+        "input": "8\n5 1 5 3 1 5 3 1\n",
+        "expected_output": "1 1 1 3 3 5 5 5\n",
+        "count_only": true
+      },
+      {
+        "name": "负数零与正数",
+        "group": "边界情况",
+        "weight": 0,
+        "input": "7\n-8 0 6 -3 0 12 -1\n",
+        "expected_output": "-8 -3 -1 0 0 6 12\n",
+        "count_only": true
+      },
+      {
+        "name": "单个负数",
+        "group": "边界情况",
+        "weight": 0,
+        "input": "1\n-42\n",
+        "expected_output": "-42\n",
+        "count_only": true
+      },
+      {
+        "name": "双元素逆序",
+        "group": "边界情况",
+        "weight": 0,
+        "input": "2\n2 -2\n",
+        "expected_output": "-2 2\n",
+        "count_only": true
+      },
+      {
+        "name": "满容量与数值边界",
+        "group": "边界情况",
+        "weight": 0,
+        "input": "100\n1000000000 98 97 96 95 94 93 92 91 90\n89 88 87 86 85 84 83 82 81 80\n79 78 77 76 75 74 73 72 71 70\n69 68 67 66 65 64 63 62 61 60\n59 58 57 56 55 54 53 52 51 50\n49 48 47 46 45 44 43 42 41 40\n39 38 37 36 35 34 33 32 31 30\n29 28 27 26 25 24 23 22 21 20\n19 18 17 16 15 14 13 12 11 10\n9 8 7 6 5 4 3 2 1 -1000000000\n",
+        "expected_output": "-1000000000 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 1000000000\n",
+        "count_only": true
+      }
+    ],
+    "hint_limit": 2,
+    "rubric_reviewed": true,
+    "explanation_required": true,
+    "defense_admission": "全部通过",
+    "defense_score_threshold": 100,
+    "language": "C++"
+  },
+  "code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int n;\n    if (!(cin >> n) || n < 1 || n > 100) {\n        return 0;\n    }\n\n    int a[100];\n    for (int i = 0; i < n; ++i) {\n        if (!(cin >> a[i])) {\n            return 0;\n        }\n    }\n\n    for (int i = 0; i < n - 1; ++i) {\n        int minIndex = i;\n        for (int j = i + 1; j < n; ++j) {\n            if (a[j] < a[minIndex]) {\n                minIndex = j;\n            }\n        }\n        if (minIndex != i) {\n            int temp = a[i];\n            a[i] = a[minIndex];\n            a[minIndex] = temp;\n        }\n    }\n\n    for (int i = 0; i < n; ++i) {\n        if (i > 0) {\n            cout << ' ';\n        }\n        cout << a[i];\n    }\n    cout << '\\n';\n    return 0;\n}\n",
+  "explanation": "使用选择排序，每轮从未排序后缀查找最小元素下标，与当前位置交换，保留全部元素并输出。",
+  "verification": {
+    "enabled": true,
+    "overall_status": "全部通过",
+    "message": "共执行11组测试，通过11组。",
+    "compiler": "D:\\dev-c++\\Dev-Cpp\\MinGW64\\bin\\g++.exe",
+    "requested_cpp_standard": "auto",
+    "effective_cpp_standard": "c++14",
+    "compile": {
+      "status": "成功",
+      "message": "编译成功：当前编译器不支持更高标准，已自动兼容为C++14（-std=c++14）。",
+      "duration_ms": 2488,
+      "requested_standard": "auto",
+      "effective_standard": "c++14",
+      "standard_flag": "-std=c++14"
+    },
+    "passed": 11,
+    "total": 11,
+    "score": 0,
+    "max_score": 0,
+    "group_scores": [
+      {
+        "group": "公开样例",
+        "score": 0,
+        "max_score": 0,
+        "passed": 3,
+        "total": 3
+      },
+      {
+        "group": "基础功能",
+        "score": 0,
+        "max_score": 0,
+        "passed": 3,
+        "total": 3
+      },
+      {
+        "group": "边界情况",
+        "score": 0,
+        "max_score": 0,
+        "passed": 5,
+        "total": 5
+      }
+    ],
+    "cases": [
+      {
+        "name": "一般排序",
+        "visibility": "公开",
+        "group": "公开样例",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "5\n64 25 12 22 11\n",
+        "expected_output": "11 12 22 25 64\n",
+        "actual_output": "11 12 22 25 64\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 289,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "负数与重复值",
+        "visibility": "公开",
+        "group": "公开样例",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "6\n-3 0 -3 5 2 0\n",
+        "expected_output": "-3 -3 0 0 2 5\n",
+        "actual_output": "-3 -3 0 0 2 5\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 89,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "单个元素",
+        "visibility": "公开",
+        "group": "公开样例",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "1\n7\n",
+        "expected_output": "7\n",
+        "actual_output": "7\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 85,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "普通无序数组",
+        "visibility": "隐藏",
+        "group": "基础功能",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "7\n12 5 9 1 20 6 3\n",
+        "expected_output": "1 3 5 6 9 12 20\n",
+        "actual_output": "1 3 5 6 9 12 20\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 96,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "已经有序",
+        "visibility": "隐藏",
+        "group": "基础功能",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "6\n-5 -2 0 3 7 11\n",
+        "expected_output": "-5 -2 0 3 7 11\n",
+        "actual_output": "-5 -2 0 3 7 11\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 87,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "完全逆序",
+        "visibility": "隐藏",
+        "group": "基础功能",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "7\n9 7 5 3 1 -1 -3\n",
+        "expected_output": "-3 -1 1 3 5 7 9\n",
+        "actual_output": "-3 -1 1 3 5 7 9\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 95,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "重复值保留",
+        "visibility": "隐藏",
+        "group": "边界情况",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "8\n5 1 5 3 1 5 3 1\n",
+        "expected_output": "1 1 1 3 3 5 5 5\n",
+        "actual_output": "1 1 1 3 3 5 5 5\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 91,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "负数零与正数",
+        "visibility": "隐藏",
+        "group": "边界情况",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "7\n-8 0 6 -3 0 12 -1\n",
+        "expected_output": "-8 -3 -1 0 0 6 12\n",
+        "actual_output": "-8 -3 -1 0 0 6 12\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 90,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "单个负数",
+        "visibility": "隐藏",
+        "group": "边界情况",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "1\n-42\n",
+        "expected_output": "-42\n",
+        "actual_output": "-42\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 88,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "双元素逆序",
+        "visibility": "隐藏",
+        "group": "边界情况",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "2\n2 -2\n",
+        "expected_output": "-2 2\n",
+        "actual_output": "-2 2\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 90,
+        "message": "实际输出与预期输出一致。"
+      },
+      {
+        "name": "满容量与数值边界",
+        "visibility": "隐藏",
+        "group": "边界情况",
+        "weight": 0,
+        "score": 0,
+        "verdict_code": "AC",
+        "status": "通过",
+        "input": "100\n1000000000 98 97 96 95 94 93 92 91 90\n89 88 87 86 85 84 83 82 81 80\n79 78 77 76 75 74 73 72 71 70\n69 68 67 66 65 64 63 62 61 60\n59 58 57 56 55 54 53 52 51 50\n49 48 47 46 45 44 43 42 41 40\n39 38 37 36 35 34 33 32 31 30\n29 28 27 26 25 24 23 22 21 20\n19 18 17 16 15 14 13 12 11 10\n9 8 7 6 5 4 3 2 1 -1000000000\n",
+        "expected_output": "-1000000000 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 1000000000\n",
+        "actual_output": "-1000000000 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 1000000000\n\n",
+        "stderr": "",
+        "evidence_truncated": false,
+        "exit_code": 0,
+        "duration_ms": 91,
+        "message": "实际输出与预期输出一致。"
+      }
+    ],
+    "executed_at": "2026-10-10 20:31:48",
+    "execution_backend": "local_cpp",
+    "scoring_mode": "pass_only"
+  },
+  "preliminary": {
+    "completion_score": 93,
+    "summary": "学生代码完整实现了选择排序，包含int main、容量100的数组、两层循环查找未排序区间最小值下标并交换，输入输出格式正确，编译与11个样例测试全部通过。解题思路简短但覆盖了核心步骤。选做实验报告未填写，不因此扣分。复杂度分析与降序修改说明在代码和解题思路中均无直接证据，需答辩核验。",
+    "criteria": [
+      {
+        "criterion_name": "未排序区间最小元素选择",
+        "weight": 30,
+        "source": "代码＋答辩",
+        "status": "满足",
+        "score": 30,
+        "code_evidence": "外层循环for (int i = 0; i < n - 1; ++i)内int minIndex = i;内层for (int j = i + 1; j < n; ++j)中if (a[j] < a[minIndex]) minIndex = j;，为自行实现的选择排序，未调用sort或使用冒泡/插入排序替代。",
+        "report_evidence": "解题思路称“每轮查找未排序后缀中的最小值下标，与当前位置交换”。",
+        "missing": "无",
+        "confidence": "高",
+        "needs_defense": true,
+        "defense_focus": "核验minIndex初始化为i以及比较条件a[j] < a[minIndex]为何能保证找到未排序区间最小元素下标。"
+      },
+      {
+        "criterion_name": "循环范围与排序过程",
+        "weight": 20,
+        "source": "代码＋答辩",
+        "status": "满足",
+        "score": 20,
+        "code_evidence": "外层i从0到n-2，内层j从i+1到n-1，比较范围不越界且覆盖未排序后缀；n-1轮后最后一个元素自然就位。",
+        "report_evidence": "解题思路称“每轮查找未排序后缀中的最小值下标”，未展开说明已排序前缀与n-1轮后最后元素就位。",
+        "missing": "无",
+        "confidence": "高",
+        "needs_defense": true,
+        "defense_focus": "核验学生能否说明已排序前缀与未排序后缀的划分，以及为何n-1轮后最后一个元素自然就位。"
+      },
+      {
+        "criterion_name": "交换操作与元素保留",
+        "weight": 15,
+        "source": "代码＋答辩",
+        "status": "满足",
+        "score": 15,
+        "code_evidence": "if (minIndex != i) { int temp = a[i]; a[i] = a[minIndex]; a[minIndex] = temp; }使用临时变量完成交换，未发生赋值覆盖，所有元素及重复值数量保持不变。",
+        "report_evidence": "解题思路称“与当前位置交换”。",
+        "missing": "无",
+        "confidence": "高",
+        "needs_defense": true,
+        "defense_focus": "核验交换为何需要临时变量，以及minIndex != i判断的作用。"
+      },
+      {
+        "criterion_name": "输入输出与合法边界",
+        "weight": 20,
+        "source": "代码＋实验报告＋答辩",
+        "status": "满足",
+        "score": 20,
+        "code_evidence": "读入n后校验n<1或n>100则返回；循环读入n个整数；排序后循环输出，i>0时输出空格，末尾换行。代码可处理n=1（外层不执行）、n=2、已排序、逆序、重复值和负数；编译成功且11个样例测试全部通过。",
+        "report_evidence": "选做报告中未找到直接证据；解题思路仅称“输出所有元素”。",
+        "missing": "无",
+        "confidence": "高",
+        "needs_defense": false,
+        "defense_focus": "无需答辩，样例测试已覆盖主要边界。"
+      },
+      {
+        "criterion_name": "复杂度分析与需求修改",
+        "weight": 15,
+        "source": "代码＋答辩",
+        "status": "部分满足",
+        "score": 8,
+        "code_evidence": "代码为标准选择排序，两层循环结构对应时间O(n²)、辅助空间O(1)，但代码中未找到复杂度分析或降序修改的注释与实现。",
+        "report_evidence": "选做报告中未找到直接证据；解题思路未提及复杂度或降序修改。",
+        "missing": "缺少时间O(n²)、辅助空间O(1)的说明，以及改为降序所需比较方向变化的解释。",
+        "confidence": "中",
+        "needs_defense": true,
+        "defense_focus": "核验学生能否说明标准选择排序的时间与辅助空间复杂度，以及改为降序时比较方向应如何变化。"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "student_id": "20260001",
+      "name": "案例学生甲",
+      "qa": [
+        {
+          "id": 1,
+          "submission_id": 1,
+          "question_index": 0,
+          "dimension": "程序逻辑理解",
+          "question": "你的代码在外层循环中写了 int minIndex = i;，内层循环从 j = i + 1 开始并用 if (a[j] < a[minIndex]) 更新 minIndex。请解释：为什么 minIndex 要初始化为 i 而不是 0 或其他值？内层循环从 i + 1 开始、比较 a[j] 与 a[minIndex]，这样为什么能保证循环结束后 minIndex 一定是未排序区间中最小元素的下标？",
+          "follow_up_question": "",
+          "answer": "minIndex保存下标而不是元素值。第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。",
+          "follow_up_answer": "",
+          "reference_score": 98,
+          "question_reason": "对应评分点“未排序区间最小元素选择”（must_defend=true），核验 minIndex 初始化为 i 以及比较条件为何能保证找到未排序区间最小元素下标。",
+          "reference_points": [
+            "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+            "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+            "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。"
+          ],
+          "reference_dimensions": [
+            "程序逻辑理解",
+            "程序逻辑理解",
+            "程序逻辑理解"
+          ],
+          "initial_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生三个要点均回答正确：minIndex初始化为i的原因（保留已排序前缀、以a[i]为候选）、内层从i+1开始的原因（a[i]已是候选无需自比）、以及比较更新机制（发现更小元素更新下标，扫描完即为未排序区间最小值下标）。解释结合了本人代码的循环结构和变量含义，逻辑完整，无错误认识。",
+            "point_assessments": [
+              {
+                "reference_point": "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+                "status": "掌握",
+                "evidence": "学生说明第i轮时a[0..i-1]已排序，未排序部分从i开始，minIndex=i先把a[i]作为候选，并指出不能设为0以免破坏已排好的前缀，解释了初始化为i的原因。",
+                "answer_quote": "第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。"
+              },
+              {
+                "reference_point": "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+                "status": "掌握",
+                "evidence": "学生指出a[i]已作为候选，因此j从i+1开始，无需再和自己比较，正确解释了内层起点。",
+                "answer_quote": "j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。"
+              },
+              {
+                "reference_point": "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。",
+                "status": "掌握",
+                "evidence": "学生说明每当a[j]<a[minIndex]就更新minIndex为j，并说明扫描过程中候选始终是已检查过的未排序元素中的最小值，扫描完成后即为整个未排序区间最小元素下标，解释了比较与更新的机制。",
+                "answer_quote": "每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码外层循环 i 从 0 到 n-2，每轮 minIndex 初始化为 i，内层 j 从 i+1 到 n-1，比较 a[j] < a[minIndex] 并更新 minIndex，循环后交换 a[i] 与 a[minIndex]。题面要求选择排序每轮在未排序区间找最小元素下标并与首元素交换，参考要点与代码实际路径一致；n=1 时外层不执行，n=2 等合法范围下内层下标均有效，未发现与变量来源、入队条件、可达分支或合法数据范围冲突的断言。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          },
+          "final_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生三个要点均回答正确：minIndex初始化为i的原因（保留已排序前缀、以a[i]为候选）、内层从i+1开始的原因（a[i]已是候选无需自比）、以及比较更新机制（发现更小元素更新下标，扫描完即为未排序区间最小值下标）。解释结合了本人代码的循环结构和变量含义，逻辑完整，无错误认识。",
+            "point_assessments": [
+              {
+                "reference_point": "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+                "status": "掌握",
+                "evidence": "学生说明第i轮时a[0..i-1]已排序，未排序部分从i开始，minIndex=i先把a[i]作为候选，并指出不能设为0以免破坏已排好的前缀，解释了初始化为i的原因。",
+                "answer_quote": "第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。"
+              },
+              {
+                "reference_point": "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+                "status": "掌握",
+                "evidence": "学生指出a[i]已作为候选，因此j从i+1开始，无需再和自己比较，正确解释了内层起点。",
+                "answer_quote": "j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。"
+              },
+              {
+                "reference_point": "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。",
+                "status": "掌握",
+                "evidence": "学生说明每当a[j]<a[minIndex]就更新minIndex为j，并说明扫描过程中候选始终是已检查过的未排序元素中的最小值，扫描完成后即为整个未排序区间最小元素下标，解释了比较与更新的机制。",
+                "answer_quote": "每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码外层循环 i 从 0 到 n-2，每轮 minIndex 初始化为 i，内层 j 从 i+1 到 n-1，比较 a[j] < a[minIndex] 并更新 minIndex，循环后交换 a[i] 与 a[minIndex]。题面要求选择排序每轮在未排序区间找最小元素下标并与首元素交换，参考要点与代码实际路径一致；n=1 时外层不执行，n=2 等合法范围下内层下标均有效，未发现与变量来源、入队条件、可达分支或合法数据范围冲突的断言。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          }
+        },
+        {
+          "id": 2,
+          "submission_id": 1,
+          "question_index": 1,
+          "dimension": "关键概念与边界",
+          "question": "你的交换代码是 int temp = a[i]; a[i] = a[minIndex]; a[minIndex] = temp;，并且外面有 if (minIndex != i) 判断。请回答两个问题：(1) 解释这里为什么必须用 temp 暂存 a[i]，如果直接写 a[i] = a[minIndex]; a[minIndex] = a[i]; 会发生什么？(2) 当 n = 1 时，外层循环 for (int i = 0; i < n - 1; ++i) 会怎样执行？此时数组是否已经满足非递减要求？",
+          "follow_up_question": "当 n = 1 时，外层循环 for (int i = 0; i < n - 1; ++i) 中的条件 i < n - 1 具体等于什么？循环体会执行几次？此时数组是否已经满足非递减要求？",
+          "answer": "temp先保存a[i]的原值，接着a[i]=a[minIndex]会覆盖a[i]，最后a[minIndex]=temp把暂存的原值写到另一位置，所以两个原值都能保留。若去掉temp，先覆盖a[i]再用现在的a[i]写回，两处就成了同一个值，原来的a[i]会丢失。",
+          "follow_up_answer": "n=1时，i初值为0，而n-1也是0，因此i<n-1即0<0为假，排序循环一次也不执行。数组只有一个元素，本身已经满足非递减要求，原元素直接输出。",
+          "reference_score": 96,
+          "question_reason": "对应评分点“交换操作与元素保留”（must_defend=true）和“输入输出与合法边界”，核验临时变量交换机制以及 n=1 时外层循环行为。",
+          "reference_points": [
+            "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+            "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+            "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。"
+          ],
+          "reference_dimensions": [
+            "关键概念掌握",
+            "关键概念掌握",
+            "边界情况意识"
+          ],
+          "initial_evaluation": {
+            "score": 72,
+            "score_level": "部分掌握",
+            "is_sufficient": false,
+            "feedback": "学生完整正确地解释了 temp 暂存原值的必要性以及去掉 temp 后元素丢失的原因，两个交换相关要点均掌握。但第(2)问完全未作答，没有说明 n=1 时外层循环条件 i < n - 1 即 i < 0、循环体一次也不执行，也未指出单元素数组本身已满足非递减要求，属于明显遗漏，因此整体分数受限。",
+            "point_assessments": [
+              {
+                "reference_point": "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+                "status": "掌握",
+                "evidence": "学生说明 temp 先保存 a[i] 原值，a[i]=a[minIndex] 会覆盖 a[i]，最后把暂存原值写到另一位置，两个原值都能保留，正确解释了暂存机制。",
+                "answer_quote": "temp先保存a[i]的原值，接着a[i]=a[minIndex]会覆盖a[i]，最后a[minIndex]=temp把暂存的原值写到另一位置，所以两个原值都能保留。"
+              },
+              {
+                "reference_point": "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+                "status": "掌握",
+                "evidence": "学生指出去掉 temp 后先覆盖 a[i]，再用现在的 a[i] 写回，两处成为同一个值，原 a[i] 丢失，正确说明了元素丢失的后果。",
+                "answer_quote": "若去掉temp，先覆盖a[i]再用现在的a[i]写回，两处就成了同一个值，原来的a[i]会丢失。"
+              },
+              {
+                "reference_point": "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。",
+                "status": "未体现",
+                "evidence": "学生回答只涉及交换与 temp 的问题，未提及 n=1 时外层循环条件 i < n - 1 即 i < 0、循环体不执行，也未说明单元素数组已满足非递减要求。",
+                "answer_quote": ""
+              }
+            ],
+            "missing_points": [
+              "n=1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行；单元素数组本身已满足非递减要求",
+              "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。"
+            ],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码中交换语句为 int temp = a[i]; a[i] = a[minIndex]; a[minIndex] = temp;，外层循环为 for (int i = 0; i < n - 1; ++i)，且 n 被限制在 1 到 100。参考要点关于 temp 暂存、直接赋值导致原值丢失、n=1 时循环条件 i<0 不执行且单元素数组已非递减，均与代码事实一致，未引入不存在的执行路径或额外约束。"
+            },
+            "should_follow_up": true,
+            "follow_up_question": "当 n = 1 时，外层循环 for (int i = 0; i < n - 1; ++i) 中的条件 i < n - 1 具体等于什么？循环体会执行几次？此时数组是否已经满足非递减要求？"
+          },
+          "final_evaluation": {
+            "score": 96,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "三个参考要点均被正确解释。第(1)问中，学生准确说明 temp 暂存 a[i] 原值、覆盖后原值丢失的因果链，以及去掉 temp 后两处写入同一值导致元素丢失的后果。第(2)问在追问后给出完整回答：n=1 时 i 初值 0、n-1 为 0，条件 0<0 为假，外层循环一次也不执行，单元素数组本身满足非递减要求。结论正确完整，能结合本人代码说明原因和结果，仅表述上未逐字复述 i<n-1 的符号形式，属次要细节，不影响核心理解。",
+            "point_assessments": [
+              {
+                "reference_point": "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+                "status": "掌握",
+                "evidence": "学生说明 temp 先保存 a[i] 原值，a[i]=a[minIndex] 会覆盖 a[i]，最后把暂存原值写到另一位置，两个原值都能保留，正确解释了暂存机制。",
+                "answer_quote": "temp先保存a[i]的原值，接着a[i]=a[minIndex]会覆盖a[i]，最后a[minIndex]=temp把暂存的原值写到另一位置，所以两个原值都能保留。"
+              },
+              {
+                "reference_point": "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+                "status": "掌握",
+                "evidence": "学生指出去掉 temp 后先覆盖 a[i]，再用现在的 a[i] 写回，两处成为同一个值，原 a[i] 丢失，正确说明了元素丢失的后果。",
+                "answer_quote": "若去掉temp，先覆盖a[i]再用现在的a[i]写回，两处就成了同一个值，原来的a[i]会丢失。"
+              },
+              {
+                "reference_point": "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。",
+                "status": "掌握",
+                "evidence": "追问回答明确指出 n=1 时 i 初值为 0、n-1 也为 0，条件 0<0 为假，排序循环一次也不执行，并说明单元素数组本身已满足非递减要求，完整覆盖该要点。",
+                "answer_quote": "n=1时，i初值为0，而n-1也是0，因此i<n-1即0<0为假，排序循环一次也不执行。数组只有一个元素，本身已经满足非递减要求，原元素直接输出。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码中交换语句为 int temp = a[i]; a[i] = a[minIndex]; a[minIndex] = temp;，外层有 if (minIndex != i) 判断，与题干描述一致。参考要点1、2关于temp暂存和直接赋值导致原值丢失的说明与代码事实相符。n=1时，外层循环条件 i < n-1 即 i < 0，循环体不执行；数组仅一个元素，非递减要求自然满足，参考要点3与代码及合法数据范围一致。题面约束1 ≤ n ≤ 100，n=1在合法范围内，前提成立。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          }
+        },
+        {
+          "id": 3,
+          "submission_id": 1,
+          "question_index": 2,
+          "dimension": "分析与修改能力",
+          "question": "如果要把这份代码改为按降序排列，你只需要修改内层循环中的比较条件。请说明：应该把 if (a[j] < a[minIndex]) 改成什么？修改后，选择排序的比较次数和辅助空间相比原来的升序版本是否发生变化？请结合你代码中的两层循环结构说明理由。",
+          "follow_up_question": "",
+          "answer": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。",
+          "follow_up_answer": "",
+          "reference_score": 98,
+          "question_reason": "对应评分点“复杂度分析与需求修改”（must_defend=true），核验学生能否说明改为降序所需的比较方向变化，以及比较次数和辅助空间是否改变。",
+          "reference_points": [
+            "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+            "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+            "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。"
+          ],
+          "reference_dimensions": [
+            "分析与修改能力",
+            "分析与修改能力",
+            "分析与修改能力"
+          ],
+          "initial_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生完整回答了三个子问：正确给出降序比较条件并解释 minIndex 保存最大值、前缀降序的机制；正确说明两层循环范围不变导致比较次数仍为 n(n-1)/2、时间 O(n²)；正确说明未新建数组、仅用常数个变量，辅助空间 O(1)。结论正确、理由结合代码结构，符合 90-100 区间。",
+            "point_assessments": [
+              {
+                "reference_point": "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+                "status": "掌握",
+                "evidence": "学生明确指出改为 if(a[j]>a[minIndex])，并说明每轮选择未排序区间的最大值放到 i，前缀成为降序，正确解释了 minIndex 保存最大元素下标及交换后前缀降序的机制。",
+                "answer_quote": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。"
+              },
+              {
+                "reference_point": "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+                "status": "掌握",
+                "evidence": "学生说明两层循环范围不变，各轮比较 n-1、n-2 直到 1 次，总计 n(n-1)/2 次，时间仍为 O(n²)，正确解释了比较次数不变的原因。",
+                "answer_quote": "两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。"
+              },
+              {
+                "reference_point": "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。",
+                "status": "掌握",
+                "evidence": "学生指出没有新建数组，temp、minIndex 等只是常数个变量，辅助空间仍为 O(1)，正确说明了辅助空间不变。",
+                "answer_quote": "没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "题面要求将升序选择排序改为降序，学生代码内层循环为 for(j=i+1;j<n;++j) 且比较 a[j]<a[minIndex]，minIndex 初始为 i，交换逻辑为 a[i] 与 a[minIndex] 互换。将比较改为 a[j]>a[minIndex] 后，minIndex 会保存未排序区间最大元素下标，交换后前缀降序，与参考要点一致。两层循环起止范围未变，内层比较次数仍为 n(n-1)/2 量级；辅助变量仍为 temp、minIndex 等常数个，空间 O(1)。参考要点与代码事实一致，无冲突或歧义。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          },
+          "final_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生完整回答了三个子问：正确给出降序比较条件并解释 minIndex 保存最大值、前缀降序的机制；正确说明两层循环范围不变导致比较次数仍为 n(n-1)/2、时间 O(n²)；正确说明未新建数组、仅用常数个变量，辅助空间 O(1)。结论正确、理由结合代码结构，符合 90-100 区间。",
+            "point_assessments": [
+              {
+                "reference_point": "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+                "status": "掌握",
+                "evidence": "学生明确指出改为 if(a[j]>a[minIndex])，并说明每轮选择未排序区间的最大值放到 i，前缀成为降序，正确解释了 minIndex 保存最大元素下标及交换后前缀降序的机制。",
+                "answer_quote": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。"
+              },
+              {
+                "reference_point": "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+                "status": "掌握",
+                "evidence": "学生说明两层循环范围不变，各轮比较 n-1、n-2 直到 1 次，总计 n(n-1)/2 次，时间仍为 O(n²)，正确解释了比较次数不变的原因。",
+                "answer_quote": "两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。"
+              },
+              {
+                "reference_point": "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。",
+                "status": "掌握",
+                "evidence": "学生指出没有新建数组，temp、minIndex 等只是常数个变量，辅助空间仍为 O(1)，正确说明了辅助空间不变。",
+                "answer_quote": "没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "题面要求将升序选择排序改为降序，学生代码内层循环为 for(j=i+1;j<n;++j) 且比较 a[j]<a[minIndex]，minIndex 初始为 i，交换逻辑为 a[i] 与 a[minIndex] 互换。将比较改为 a[j]>a[minIndex] 后，minIndex 会保存未排序区间最大元素下标，交换后前缀降序，与参考要点一致。两层循环起止范围未变，内层比较次数仍为 n(n-1)/2 量级；辅助变量仍为 temp、minIndex 等常数个，空间 O(1)。参考要点与代码事实一致，无冲突或歧义。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          }
+        }
+      ],
+      "report": {
+        "overall": 100,
+        "level": "理解充分",
+        "dimensions": {
+          "程序逻辑理解": 100,
+          "关键概念掌握": 100,
+          "边界情况意识": 100,
+          "分析与修改能力": 100
+        },
+        "weakest": "程序逻辑理解",
+        "assessment_complete": true,
+        "assessed_dimensions": 4,
+        "score_version": "point_evidence_v1",
+        "dimension_evidence": {
+          "程序逻辑理解": {
+            "status": "要点已掌握",
+            "score": 100,
+            "points": [
+              {
+                "question": 1,
+                "reference_point": "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+                "status": "掌握",
+                "answer_quote": "第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 1,
+                "reference_point": "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+                "status": "掌握",
+                "answer_quote": "j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 1,
+                "reference_point": "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。",
+                "status": "掌握",
+                "answer_quote": "每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          },
+          "关键概念掌握": {
+            "status": "要点已掌握",
+            "score": 100,
+            "points": [
+              {
+                "question": 2,
+                "reference_point": "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+                "status": "掌握",
+                "answer_quote": "temp先保存a[i]的原值，接着a[i]=a[minIndex]会覆盖a[i]，最后a[minIndex]=temp把暂存的原值写到另一位置，所以两个原值都能保留。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 2,
+                "reference_point": "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+                "status": "掌握",
+                "answer_quote": "若去掉temp，先覆盖a[i]再用现在的a[i]写回，两处就成了同一个值，原来的a[i]会丢失。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          },
+          "边界情况意识": {
+            "status": "要点已掌握",
+            "score": 100,
+            "points": [
+              {
+                "question": 2,
+                "reference_point": "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。",
+                "status": "掌握",
+                "answer_quote": "n=1时，i初值为0，而n-1也是0，因此i<n-1即0<0为假，排序循环一次也不执行。数组只有一个元素，本身已经满足非递减要求，原元素直接输出。",
+                "source": "追问回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          },
+          "分析与修改能力": {
+            "status": "要点已掌握",
+            "score": 100,
+            "points": [
+              {
+                "question": 3,
+                "reference_point": "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+                "status": "掌握",
+                "answer_quote": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 3,
+                "reference_point": "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+                "status": "掌握",
+                "answer_quote": "两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 3,
+                "reference_point": "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。",
+                "status": "掌握",
+                "answer_quote": "没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          }
+        },
+        "summary": "本次答辩覆盖程序逻辑理解、关键概念掌握、边界情况意识和分析与修改能力四个维度，学生均能结合本人代码给出可核对的解释，评价完整。学生正确说明了minIndex初始化为i、内层从i+1开始及比较更新机制，也正确解释了temp暂存交换的原因、n=1时外层循环不执行，以及改为降序时比较条件、比较次数和辅助空间的变化。未发现明显误解或回答矛盾，但结论仅基于本次答辩所考查的要点，不代表对全部实现细节的独立验证。",
+        "suggestion": "1. 继续用具体输入（如n=1、n=2、含重复值和逆序数据）手动跟踪两层循环中i、j、minIndex的变化，巩固对未排序区间边界的理解。2. 尝试自行补充选做的实验报告内容，如排序过程记录、测试用例和复杂度、稳定性分析，把已掌握的口头解释转化为书面论证。3. 在修改类问题上进一步练习其他变体（如改为按绝对值排序或只排序部分区间），检验对比较条件与循环范围关系的迁移能力。",
+        "review_required": false,
+        "review_reasons": []
+      },
+      "teacher_action": "认可AI诊断",
+      "teacher_reason": "已核对合成案例的作答与引用证据。"
+    },
+    {
+      "student_id": "20260002",
+      "name": "案例学生乙",
+      "qa": [
+        {
+          "id": 4,
+          "submission_id": 2,
+          "question_index": 0,
+          "dimension": "程序逻辑理解",
+          "question": "你的代码在外层循环中写了 int minIndex = i;，内层循环从 j = i + 1 开始并用 if (a[j] < a[minIndex]) 更新 minIndex。请解释：为什么 minIndex 要初始化为 i 而不是 0 或其他值？内层循环从 i + 1 开始、比较 a[j] 与 a[minIndex]，这样为什么能保证循环结束后 minIndex 一定是未排序区间中最小元素的下标？",
+          "follow_up_question": "",
+          "answer": "minIndex保存下标而不是元素值。第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。",
+          "follow_up_answer": "",
+          "reference_score": 98,
+          "question_reason": "对应评分点“未排序区间最小元素选择”（must_defend=true），核验 minIndex 初始化为 i 以及比较条件为何能保证找到未排序区间最小元素下标。",
+          "reference_points": [
+            "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+            "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+            "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。"
+          ],
+          "reference_dimensions": [
+            "程序逻辑理解",
+            "程序逻辑理解",
+            "程序逻辑理解"
+          ],
+          "initial_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生三个要点均回答正确：minIndex初始化为i的原因（保留已排序前缀、以a[i]为候选）、内层从i+1开始的原因（a[i]已是候选无需自比）、以及比较更新机制（发现更小元素更新下标，扫描完即为未排序区间最小值下标）。解释结合了本人代码的循环结构和变量含义，逻辑完整，无错误认识。",
+            "point_assessments": [
+              {
+                "reference_point": "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+                "status": "掌握",
+                "evidence": "学生说明第i轮时a[0..i-1]已排序，未排序部分从i开始，minIndex=i先把a[i]作为候选，并指出不能设为0以免破坏已排好的前缀，解释了初始化为i的原因。",
+                "answer_quote": "第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。"
+              },
+              {
+                "reference_point": "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+                "status": "掌握",
+                "evidence": "学生指出a[i]已作为候选，因此j从i+1开始，无需再和自己比较，正确解释了内层起点。",
+                "answer_quote": "j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。"
+              },
+              {
+                "reference_point": "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。",
+                "status": "掌握",
+                "evidence": "学生说明每当a[j]<a[minIndex]就更新minIndex为j，并说明扫描过程中候选始终是已检查过的未排序元素中的最小值，扫描完成后即为整个未排序区间最小元素下标，解释了比较与更新的机制。",
+                "answer_quote": "每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码外层循环 i 从 0 到 n-2，每轮 minIndex 初始化为 i，内层 j 从 i+1 到 n-1，比较 a[j] < a[minIndex] 并更新 minIndex，循环后交换 a[i] 与 a[minIndex]。题面要求选择排序每轮在未排序区间找最小元素下标并与首元素交换，参考要点与代码实际路径一致；n=1 时外层不执行，n=2 等合法范围下内层下标均有效，未发现与变量来源、入队条件、可达分支或合法数据范围冲突的断言。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          },
+          "final_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生三个要点均回答正确：minIndex初始化为i的原因（保留已排序前缀、以a[i]为候选）、内层从i+1开始的原因（a[i]已是候选无需自比）、以及比较更新机制（发现更小元素更新下标，扫描完即为未排序区间最小值下标）。解释结合了本人代码的循环结构和变量含义，逻辑完整，无错误认识。",
+            "point_assessments": [
+              {
+                "reference_point": "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+                "status": "掌握",
+                "evidence": "学生说明第i轮时a[0..i-1]已排序，未排序部分从i开始，minIndex=i先把a[i]作为候选，并指出不能设为0以免破坏已排好的前缀，解释了初始化为i的原因。",
+                "answer_quote": "第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。"
+              },
+              {
+                "reference_point": "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+                "status": "掌握",
+                "evidence": "学生指出a[i]已作为候选，因此j从i+1开始，无需再和自己比较，正确解释了内层起点。",
+                "answer_quote": "j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。"
+              },
+              {
+                "reference_point": "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。",
+                "status": "掌握",
+                "evidence": "学生说明每当a[j]<a[minIndex]就更新minIndex为j，并说明扫描过程中候选始终是已检查过的未排序元素中的最小值，扫描完成后即为整个未排序区间最小元素下标，解释了比较与更新的机制。",
+                "answer_quote": "每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码外层循环 i 从 0 到 n-2，每轮 minIndex 初始化为 i，内层 j 从 i+1 到 n-1，比较 a[j] < a[minIndex] 并更新 minIndex，循环后交换 a[i] 与 a[minIndex]。题面要求选择排序每轮在未排序区间找最小元素下标并与首元素交换，参考要点与代码实际路径一致；n=1 时外层不执行，n=2 等合法范围下内层下标均有效，未发现与变量来源、入队条件、可达分支或合法数据范围冲突的断言。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          }
+        },
+        {
+          "id": 5,
+          "submission_id": 2,
+          "question_index": 1,
+          "dimension": "关键概念与边界",
+          "question": "你的交换代码是 int temp = a[i]; a[i] = a[minIndex]; a[minIndex] = temp;，并且外面有 if (minIndex != i) 判断。请回答两个问题：(1) 解释这里为什么必须用 temp 暂存 a[i]，如果直接写 a[i] = a[minIndex]; a[minIndex] = a[i]; 会发生什么？(2) 当 n = 1 时，外层循环 for (int i = 0; i < n - 1; ++i) 会怎样执行？此时数组是否已经满足非递减要求？",
+          "follow_up_question": "请结合代码逐步模拟 a[i]=5、a[minIndex]=3 时执行 a[i]=a[minIndex]; a[minIndex]=a[i]; 两条语句后两个位置的值分别是多少？另外，当 n=1 时，i < n-1 这个条件是否成立？",
+          "answer": "不需要temp，先把a[minIndex]写进a[i]，再把现在的a[i]写回去就能保留两个原值。n=1时外层循环仍执行一次，会读取a[1]参与比较。",
+          "follow_up_answer": "temp只是变量名，复制完a[i]后两个原值仍保留。只有一个元素时也至少要执行一次循环才能确认已经排序。",
+          "reference_score": 2,
+          "question_reason": "对应评分点“交换操作与元素保留”（must_defend=true）和“输入输出与合法边界”，核验临时变量交换机制以及 n=1 时外层循环行为。",
+          "reference_points": [
+            "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+            "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+            "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。"
+          ],
+          "reference_dimensions": [
+            "关键概念掌握",
+            "关键概念掌握",
+            "边界情况意识"
+          ],
+          "initial_evaluation": {
+            "score": 2,
+            "score_level": "理解不足",
+            "is_sufficient": false,
+            "feedback": "学生三个要点均判断错误：交换部分误以为覆盖后写回可保留原值，未认识到 a[i] 原值丢失；n=1 部分错误认为外层循环会执行并访问 a[1]，而实际条件 i < 0 不成立，循环体不执行。回答几乎没有有效理解，故分数很低。",
+            "point_assessments": [
+              {
+                "reference_point": "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+                "status": "理解错误",
+                "evidence": "学生认为不需要 temp，并声称先把 a[minIndex] 写进 a[i] 后，再把现在的 a[i] 写回去就能保留两个原值，这忽略了 a[i] 原值已被覆盖、第二次赋值写回的是同一个值。",
+                "answer_quote": "不需要temp，先把a[minIndex]写进a[i]，再把现在的a[i]写回去就能保留两个原值。"
+              },
+              {
+                "reference_point": "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+                "status": "理解错误",
+                "evidence": "学生没有说明直接赋值会导致 a[i] 原值丢失，反而认为这样能保留两个原值，与交换语义相反。",
+                "answer_quote": "不需要temp，先把a[minIndex]写进a[i]，再把现在的a[i]写回去就能保留两个原值。"
+              },
+              {
+                "reference_point": "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。",
+                "status": "理解错误",
+                "evidence": "学生称 n=1 时外层循环仍执行一次并读取 a[1]，但 n=1 时条件 i < n-1 即 i < 0 不成立，循环体一次也不执行，也不会访问 a[1]。",
+                "answer_quote": "n=1时外层循环仍执行一次，会读取a[1]参与比较。"
+              }
+            ],
+            "missing_points": [
+              "未说明 temp 暂存 a[i] 原值以避免覆盖丢失",
+              "未说明直接赋值会导致元素丢失或重复",
+              "未说明 n=1 时外层循环条件 i < n-1 即 i < 0，循环体不执行",
+              "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。"
+            ],
+            "misconceptions": [
+              "认为不用 temp、先写 a[minIndex] 到 a[i] 再写回就能保留两个原值",
+              "认为 n=1 时外层循环仍执行一次并读取 a[1]"
+            ],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码中交换语句为 int temp = a[i]; a[i] = a[minIndex]; a[minIndex] = temp;，外层循环为 for (int i = 0; i < n - 1; ++i)。n=1 时条件 i<0 不成立，循环体不执行；单元素数组按非递减定义成立。参考要点与代码事实一致。"
+            },
+            "should_follow_up": true,
+            "follow_up_question": "请结合代码逐步模拟 a[i]=5、a[minIndex]=3 时执行 a[i]=a[minIndex]; a[minIndex]=a[i]; 两条语句后两个位置的值分别是多少？另外，当 n=1 时，i < n-1 这个条件是否成立？"
+          },
+          "final_evaluation": {
+            "score": 2,
+            "score_level": "理解不足",
+            "is_sufficient": false,
+            "feedback": "三个参考要点均未正确掌握。交换部分学生始终认为不用 temp 也能保留两个原值，追问后仍未给出 a[i]=5、a[minIndex]=3 的逐步模拟，也未说明 a[i] 原值被覆盖后第二次赋值写回的是同一个值，因此元素丢失/重复的因果解释缺失。n=1 部分学生仍认为至少要执行一次循环，而代码中 for (int i = 0; i < n - 1; ++i) 在 n=1 时条件 i < 0 不成立，循环体一次也不执行，单元素数组本身已满足非递减要求。追问回答没有纠正原误解，也没有提供有效解释，故分数很低。",
+            "point_assessments": [
+              {
+                "reference_point": "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+                "status": "理解错误",
+                "evidence": "首次回答称不需要 temp，认为先写 a[minIndex] 到 a[i] 再写回就能保留两个原值；追问回答仍未说明 temp 暂存 a[i] 原值以避免覆盖丢失，反而称“temp只是变量名，复制完a[i]后两个原值仍保留”，没有解释暂存机制。",
+                "answer_quote": "不需要temp，先把a[minIndex]写进a[i]，再把现在的a[i]写回去就能保留两个原值。"
+              },
+              {
+                "reference_point": "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+                "status": "理解错误",
+                "evidence": "首次回答认为直接赋值能保留两个原值；追问要求模拟 a[i]=5、a[minIndex]=3 执行两条赋值后的值，学生未给出模拟结果，也未纠正原误解，仍坚持“两个原值仍保留”。",
+                "answer_quote": "temp只是变量名，复制完a[i]后两个原值仍保留。"
+              },
+              {
+                "reference_point": "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。",
+                "status": "理解错误",
+                "evidence": "首次回答称 n=1 时外层循环仍执行一次并读取 a[1]；追问回答仍称“只有一个元素时也至少要执行一次循环才能确认已经排序”，未纠正对循环条件 i < n-1 即 i < 0 不成立、循环体不执行的理解。",
+                "answer_quote": "只有一个元素时也至少要执行一次循环才能确认已经排序。"
+              }
+            ],
+            "missing_points": [
+              "未说明 temp 暂存 a[i] 原值以避免被 a[minIndex] 覆盖后丢失",
+              "未说明直接 a[i] = a[minIndex]; a[minIndex] = a[i]; 会导致 a[i] 原值丢失、第二次赋值写回同一个值，造成元素丢失或重复",
+              "未说明 n=1 时外层循环条件 i < n-1 即 i < 0 不成立，循环体一次也不执行，单元素数组已满足非递减要求",
+              "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。"
+            ],
+            "misconceptions": [
+              "认为不用 temp、先写 a[minIndex] 到 a[i] 再写回就能保留两个原值",
+              "认为 n=1 时外层循环仍执行一次并读取 a[1]",
+              "认为只有一个元素时也至少要执行一次循环才能确认已经排序"
+            ],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "代码中交换语句为 int temp=a[i]; a[i]=a[minIndex]; a[minIndex]=temp;，外层有 if(minIndex!=i) 保护；若直接 a[i]=a[minIndex]; a[minIndex]=a[i];，a[i] 原值被覆盖，第二次赋值写入同一值，确实导致原值丢失。n=1 时外层循环条件 i<n-1 即 i<0，循环体不执行，单元素数组已满足非递减。参考要点与代码事实一致，题面合法范围 1≤n≤100 也支持 n=1 情形。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          }
+        },
+        {
+          "id": 6,
+          "submission_id": 2,
+          "question_index": 2,
+          "dimension": "分析与修改能力",
+          "question": "如果要把这份代码改为按降序排列，你只需要修改内层循环中的比较条件。请说明：应该把 if (a[j] < a[minIndex]) 改成什么？修改后，选择排序的比较次数和辅助空间相比原来的升序版本是否发生变化？请结合你代码中的两层循环结构说明理由。",
+          "follow_up_question": "",
+          "answer": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。",
+          "follow_up_answer": "",
+          "reference_score": 98,
+          "question_reason": "对应评分点“复杂度分析与需求修改”（must_defend=true），核验学生能否说明改为降序所需的比较方向变化，以及比较次数和辅助空间是否改变。",
+          "reference_points": [
+            "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+            "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+            "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。"
+          ],
+          "reference_dimensions": [
+            "分析与修改能力",
+            "分析与修改能力",
+            "分析与修改能力"
+          ],
+          "initial_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生完整回答了三个子问：正确给出降序比较条件并解释 minIndex 保存最大值、前缀降序的机制；正确说明两层循环范围不变导致比较次数仍为 n(n-1)/2、时间 O(n²)；正确说明未新建数组、仅用常数个变量，辅助空间 O(1)。结论正确、理由结合代码结构，符合 90-100 区间。",
+            "point_assessments": [
+              {
+                "reference_point": "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+                "status": "掌握",
+                "evidence": "学生明确指出改为 if(a[j]>a[minIndex])，并说明每轮选择未排序区间的最大值放到 i，前缀成为降序，正确解释了 minIndex 保存最大元素下标及交换后前缀降序的机制。",
+                "answer_quote": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。"
+              },
+              {
+                "reference_point": "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+                "status": "掌握",
+                "evidence": "学生说明两层循环范围不变，各轮比较 n-1、n-2 直到 1 次，总计 n(n-1)/2 次，时间仍为 O(n²)，正确解释了比较次数不变的原因。",
+                "answer_quote": "两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。"
+              },
+              {
+                "reference_point": "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。",
+                "status": "掌握",
+                "evidence": "学生指出没有新建数组，temp、minIndex 等只是常数个变量，辅助空间仍为 O(1)，正确说明了辅助空间不变。",
+                "answer_quote": "没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "题面要求将升序选择排序改为降序，学生代码内层循环为 for(j=i+1;j<n;++j) 且比较 a[j]<a[minIndex]，minIndex 初始为 i，交换逻辑为 a[i] 与 a[minIndex] 互换。将比较改为 a[j]>a[minIndex] 后，minIndex 会保存未排序区间最大元素下标，交换后前缀降序，与参考要点一致。两层循环起止范围未变，内层比较次数仍为 n(n-1)/2 量级；辅助变量仍为 temp、minIndex 等常数个，空间 O(1)。参考要点与代码事实一致，无冲突或歧义。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          },
+          "final_evaluation": {
+            "score": 98,
+            "score_level": "理解充分",
+            "is_sufficient": true,
+            "feedback": "学生完整回答了三个子问：正确给出降序比较条件并解释 minIndex 保存最大值、前缀降序的机制；正确说明两层循环范围不变导致比较次数仍为 n(n-1)/2、时间 O(n²)；正确说明未新建数组、仅用常数个变量，辅助空间 O(1)。结论正确、理由结合代码结构，符合 90-100 区间。",
+            "point_assessments": [
+              {
+                "reference_point": "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+                "status": "掌握",
+                "evidence": "学生明确指出改为 if(a[j]>a[minIndex])，并说明每轮选择未排序区间的最大值放到 i，前缀成为降序，正确解释了 minIndex 保存最大元素下标及交换后前缀降序的机制。",
+                "answer_quote": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。"
+              },
+              {
+                "reference_point": "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+                "status": "掌握",
+                "evidence": "学生说明两层循环范围不变，各轮比较 n-1、n-2 直到 1 次，总计 n(n-1)/2 次，时间仍为 O(n²)，正确解释了比较次数不变的原因。",
+                "answer_quote": "两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。"
+              },
+              {
+                "reference_point": "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。",
+                "status": "掌握",
+                "evidence": "学生指出没有新建数组，temp、minIndex 等只是常数个变量，辅助空间仍为 O(1)，正确说明了辅助空间不变。",
+                "answer_quote": "没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。"
+              }
+            ],
+            "missing_points": [],
+            "misconceptions": [],
+            "confidence": "高",
+            "premise_issue": "",
+            "premise_review": {
+              "status": "可评价",
+              "premise_issue": "",
+              "basis": "题面要求将升序选择排序改为降序，学生代码内层循环为 for(j=i+1;j<n;++j) 且比较 a[j]<a[minIndex]，minIndex 初始为 i，交换逻辑为 a[i] 与 a[minIndex] 互换。将比较改为 a[j]>a[minIndex] 后，minIndex 会保存未排序区间最大元素下标，交换后前缀降序，与参考要点一致。两层循环起止范围未变，内层比较次数仍为 n(n-1)/2 量级；辅助变量仍为 temp、minIndex 等常数个，空间 O(1)。参考要点与代码事实一致，无冲突或歧义。"
+            },
+            "should_follow_up": false,
+            "follow_up_question": ""
+          }
+        }
+      ],
+      "report": {
+        "overall": 50,
+        "level": "需要巩固",
+        "dimensions": {
+          "程序逻辑理解": 100,
+          "关键概念掌握": 0,
+          "边界情况意识": 0,
+          "分析与修改能力": 100
+        },
+        "weakest": "关键概念掌握",
+        "assessment_complete": true,
+        "assessed_dimensions": 4,
+        "score_version": "point_evidence_v1",
+        "dimension_evidence": {
+          "程序逻辑理解": {
+            "status": "要点已掌握",
+            "score": 100,
+            "points": [
+              {
+                "question": 1,
+                "reference_point": "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前已知最小值，后续再与其余元素比较更新。",
+                "status": "掌握",
+                "answer_quote": "第i轮时a[0..i-1]已经排序，未排序部分从i开始，所以minIndex=i先把a[i]作为候选，不能设为0去破坏已经排好的前缀。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 1,
+                "reference_point": "内层 j 从 i + 1 开始，是因为下标 i 本身已作为候选最小值，只需比较 i 之后的未排序元素。",
+                "status": "掌握",
+                "answer_quote": "j从i+1开始，因为a[i]已经作为候选，不必再和自己比较。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 1,
+                "reference_point": "比较 a[j] < a[minIndex] 时，若发现更小元素就把 minIndex 更新为 j，循环结束后 minIndex 保存未排序区间最小元素下标。",
+                "status": "掌握",
+                "answer_quote": "每当a[j]<a[minIndex]就把minIndex更新为j；在扫描过程中候选始终是已经检查过的未排序元素里的最小值，全部扫描完成后它就是整个未排序区间的最小元素下标。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          },
+          "关键概念掌握": {
+            "status": "需要巩固",
+            "score": 0,
+            "points": [
+              {
+                "question": 2,
+                "reference_point": "temp 用于暂存 a[i] 的原值，避免 a[i] 被 a[minIndex] 覆盖后原值丢失，从而保证交换后两个位置的值正确互换。",
+                "status": "理解错误",
+                "answer_quote": "不需要temp，先把a[minIndex]写进a[i]，再把现在的a[i]写回去就能保留两个原值。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 2,
+                "reference_point": "若直接 a[i] = a[minIndex]; a[minIndex] = a[i];，a[i] 的原值已被覆盖，第二次赋值会把同一个值写回，导致元素丢失或重复。",
+                "status": "理解错误",
+                "answer_quote": "temp只是变量名，复制完a[i]后两个原值仍保留。",
+                "source": "追问回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          },
+          "边界情况意识": {
+            "status": "需要巩固",
+            "score": 0,
+            "points": [
+              {
+                "question": 2,
+                "reference_point": "n = 1 时外层循环条件 i < n - 1 即 i < 0，循环体一次也不执行，数组只有一个元素，本身已满足非递减要求。",
+                "status": "理解错误",
+                "answer_quote": "只有一个元素时也至少要执行一次循环才能确认已经排序。",
+                "source": "追问回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          },
+          "分析与修改能力": {
+            "status": "要点已掌握",
+            "score": 100,
+            "points": [
+              {
+                "question": 3,
+                "reference_point": "应改为 if (a[j] > a[minIndex])，这样 minIndex 保存的是未排序区间最大元素下标，交换后前缀变为降序。",
+                "status": "掌握",
+                "answer_quote": "将if(a[j]<a[minIndex])改为if(a[j]>a[minIndex])，每轮选择未排序区间的最大值放到i，前缀成为降序。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 3,
+                "reference_point": "比较次数不变，因为两层循环的起止范围没有改变，内层仍执行约 n(n-1)/2 次比较。",
+                "status": "掌握",
+                "answer_quote": "两层循环的范围都不变，各轮分别比较n-1、n-2直到1次，总共n(n-1)/2次，时间仍为O(n²)。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              },
+              {
+                "question": 3,
+                "reference_point": "辅助空间不变，仍只使用 temp、minIndex 等常数个额外变量，为 O(1)。",
+                "status": "掌握",
+                "answer_quote": "没有新建数组，temp、minIndex等只是常数个变量，辅助空间仍为O(1)。",
+                "source": "首次回答",
+                "confidence": "高",
+                "usable": true,
+                "reason": ""
+              }
+            ],
+            "reason": "分数来自下列要点的逐项判断，原文可核对。"
+          }
+        },
+        "summary": "本次答辩覆盖程序逻辑理解、关键概念掌握、边界情况意识和分析与修改能力四个维度，评价相对完整。学生在选择排序的循环结构、minIndex 含义及降序改造分析上回答正确，但在交换必须借助 temp 暂存、以及 n=1 时外层循环不执行这两点上存在明确误解，追问后仍未纠正。整体表现为部分维度掌握、关键概念与边界意识需要巩固，不宜据此认定整体理解充分。",
+        "suggestion": "1. 用具体数值（如 a[i]=5、a[minIndex]=3）逐步模拟 a[i]=a[minIndex]; a[minIndex]=a[i]; 两条语句，观察 a[i] 原值被覆盖后第二次赋值写回同一值，从而理解 temp 暂存的必要性。2. 针对 n=1、n=2、已排序、逆序、含重复值等情形，逐一手工跟踪外层循环条件 i < n-1 是否成立、循环体是否执行，建立边界条件的执行路径意识。3. 在代码中保留 if (minIndex != i) 这类保护的同时，思考去掉它是否仍正确，以加深对交换语义和冗余判断的理解。",
+        "review_required": true,
+        "review_reasons": [
+          "综合理解度低于70，建议教师核查低分维度及逐题证据",
+          "逐点作答证据中存在明确理解错误，建议教师核查原文",
+          "至少一道问题的理解度评分低于60",
+          "不同问题之间表现差异较大"
+        ]
+      },
+      "teacher_action": "要求学生重新答辩",
+      "teacher_reason": "请先用a[i]=5、a[minIndex]=2逐句跟踪两次直接赋值，说明为何原值会丢失以及temp的作用；再代入n=1、i=0判断i<n-1是否成立。",
+      "redefense_questions": [
+        {
+          "dimension": "程序逻辑理解",
+          "question": "你的代码在外层循环中写了 int minIndex = i;，内层循环从 j = i + 1 开始并用 if (a[j] < a[minIndex]) 更新 minIndex。请结合这两处具体写法，说明为什么 minIndex 要从 i 开始、内层循环为什么从 i + 1 开始，以及这样写如何保证每轮找到的是未排序区间中的最小元素下标。",
+          "reference_points": [
+            "minIndex 初始化为 i，表示先把未排序区间的首元素当作当前最小候选，后续再与其余元素比较。",
+            "内层 j 从 i + 1 开始，因为下标 i 已作为初始候选，只需比较 i 之后的未排序元素，避免重复比较自身。",
+            "a[j] < a[minIndex] 成立时更新 minIndex，保证 minIndex 始终保存已扫描范围内最小元素的下标。"
+          ],
+          "reference_dimensions": [
+            "程序逻辑理解",
+            "程序逻辑理解",
+            "程序逻辑理解"
+          ],
+          "reason": "对应评分点“未排序区间最小元素选择”，needs_defense 为 true，需核验 minIndex 初始化与比较条件为何能保证找到未排序区间最小元素下标。"
+        },
+        {
+          "dimension": "关键概念与边界",
+          "question": "你的交换代码是 int temp = a[i]; a[i] = a[minIndex]; a[minIndex] = temp;。请先说明如果去掉 temp、直接写 a[i] = a[minIndex]; a[minIndex] = a[i];，当 a[i]=5、a[minIndex]=2 时两次赋值后两个位置各是什么值、原值为何丢失；再说明当 n=1 时外层循环条件 i < n - 1 是否成立、循环体是否执行，以及此时数组是否已经有序。",
+          "reference_points": [
+            "直接两次赋值时，a[i] 先被覆盖为 2，随后 a[minIndex] 又被赋成已被覆盖的 a[i]（即 2），原值 5 丢失，两个位置都变成 2。",
+            "temp 先保存 a[i] 的原值，使 a[minIndex] 能写回该原值，从而完成两个元素值的互换且不丢失数据。",
+            "n=1 时 n-1=0，i=0 不满足 i<0，外层循环体一次也不执行，单元素数组本身已满足非递减。"
+          ],
+          "reference_dimensions": [
+            "关键概念掌握",
+            "关键概念掌握",
+            "边界情况意识"
+          ],
+          "reason": "对应评分点“交换操作与元素保留”和“输入输出与合法边界”，needs_defense 为 true，需核验 temp 保留被覆盖原值的机制以及 n=1 时外层循环行为。"
+        },
+        {
+          "dimension": "分析与修改能力",
+          "question": "如果要把这份代码改为按降序排列，你打算修改哪一处比较条件？请写出修改后的条件，并说明修改后比较次数和辅助空间是否发生变化。",
+          "reference_points": [
+            "将内层比较条件由 a[j] < a[minIndex] 改为 a[j] > a[minIndex]，使 minIndex 记录未排序区间最大元素下标。",
+            "比较次数仍由两层循环范围决定，标准选择排序约为 n(n-1)/2 次，不因升降序改变。",
+            "辅助空间仍只使用 minIndex、temp 等常数个变量，保持 O(1)。"
+          ],
+          "reference_dimensions": [
+            "分析与修改能力",
+            "分析与修改能力",
+            "分析与修改能力"
+          ],
+          "reason": "对应评分点“复杂度分析与需求修改”，初评部分满足且 needs_defense 为 true，需核验降序修改的比较方向变化以及复杂度是否改变。"
+        }
+      ]
+    }
+  ]
+}

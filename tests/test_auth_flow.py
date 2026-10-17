@@ -3,168 +3,148 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-
 from streamlit.testing.v1 import AppTest
-
+import accounts
 import database as db
+from auth_helpers import authenticate,PASSWORD
 
-
-QUESTIONS = [
-    {
-        "dimension": "程序逻辑理解",
-        "question": "请解释主要循环。",
-        "reference_points": ["循环边界"],
-    }
-]
-
-REPORT = {
-    "overall": 80,
-    "level": "理解较好",
-    "weakest": "边界情况意识",
-    "summary": "能够说明主要逻辑。",
-    "suggestion": "继续检查边界情况。",
-    "dimensions": {
-        "程序逻辑理解": 85,
-        "关键概念掌握": 80,
-        "边界情况意识": 70,
-        "分析与修改能力": 85,
-    },
-    "review_required": False,
-    "review_reasons": [],
-}
-
-
+ROOT=Path(__file__).resolve().parents[1]
 class AuthenticationFlowTests(unittest.TestCase):
     def setUp(self):
-        self.temp_folder = tempfile.TemporaryDirectory()
-        self.original_path = db.DB_PATH
-        db.DB_PATH = Path(self.temp_folder.name) / "wuma_ai.db"
-        db.init_db()
-        self.app_path = Path(__file__).resolve().parents[1] / "app.py"
+        self.temp=tempfile.TemporaryDirectory();self.old=db.DB_PATH;db.DB_PATH=Path(self.temp.name)/'db.sqlite'
+        db.init_db();accounts.init_schema()
+    def tearDown(self):db.DB_PATH=self.old;self.temp.cleanup()
+    def app(self):return AppTest.from_file(str(ROOT/'app.py'))
+    def ready(self):
+        a=self.app();authenticate(a,'学生','20261234','李同学');return a
+    def test_personal_login_uses_canonical_identity_and_logout_revokes_token(self):
+        self.ready();a=self.app().run(timeout=20)
+        next(i for i in a.text_input if i.label=='学生学号').set_value('20261234')
+        next(i for i in a.text_input if i.label=='密码').set_value(PASSWORD)
+        next(b for b in a.button if b.label=='进入学生端').click().run(timeout=20)
+        self.assertFalse(a.exception);token=a.session_state['auth_token']
+        self.assertEqual(a.session_state['auth_name'],'李同学')
+        labels=[b.label for b in a.button];self.assertIn('实验提交',labels);self.assertNotIn('系统设置',labels)
+        next(b for b in a.button if b.label=='退出登录').click().run(timeout=20)
+        self.assertIsNone(accounts.session(token));self.assertFalse(a.exception)
+    def test_forged_role_without_session_does_not_open_teacher_routes(self):
+        self.ready();a=self.app();a.session_state['auth_role']='教师';a.session_state['current_page']='教师工作台'
+        a.run(timeout=20);self.assertFalse(a.exception)
+        self.assertTrue(any(i.label=='学生学号' for i in a.text_input));self.assertFalse(any(b.label=='实验管理' for b in a.button))
+    def test_first_setup_requires_existing_teacher_secret_and_preserves_assignments(self):
+        before=db.list_assignments()
+        with patch.dict(os.environ,{'TEACHER_PASSWORD':'fixture-setup'}):
+            a=self.app().run(timeout=20)
+            values={'原教师密码':'wrong','管理员账号':'admin-one','管理员姓名':'管理员','管理员新密码':PASSWORD,'确认管理员新密码':PASSWORD,
+                    '首位教师账号':'teacher-one','首位教师姓名':'王老师','首位教师密码':PASSWORD,'确认首位教师密码':PASSWORD,'首个班级名称':'软件一班'}
+            for i in a.text_input:
+                if i.label in values:i.set_value(values[i.label])
+            next(b for b in a.button if b.label=='建立管理员并保留旧记录').click().run(timeout=20)
+            self.assertFalse(accounts.enabled());self.assertTrue(a.error)
+            next(i for i in a.text_input if i.label=='原教师密码').set_value('fixture-setup')
+            next(b for b in a.button if b.label=='建立管理员并保留旧记录').click().run(timeout=20)
+        self.assertFalse(a.exception);self.assertTrue(accounts.enabled());self.assertEqual(db.list_assignments(),before)
+    def test_initial_password_must_change_before_teaching_pages(self):
+        accounts.bootstrap('setup','setup','admin','管理员',PASSWORD,'一班',teacher_username='teacher-one',teacher_name='王老师',teacher_password=PASSWORD);accounts.add_students(1,1,[{'学号':'20260001','姓名':'张同学','初始密码':PASSWORD}])
+        a=self.app();a.session_state['auth_token']=accounts.login('20260001',PASSWORD);a.run(timeout=20)
+        self.assertTrue(any(t.value=='首次登录－修改初始密码' for t in a.title));self.assertFalse(any(b.label=='实验提交' for b in a.button))
+        for i in a.text_input:i.set_value(PASSWORD if i.label=='当前密码' else 'New-password-2026')
+        next(b for b in a.button if b.label=='修改密码并重新登录').click().run(timeout=20)
+        self.assertFalse(a.exception);self.assertFalse(accounts.session(accounts.login('20260001','New-password-2026'))['must_change'])
+    def test_teacher_home_and_settings_hide_diagnostics_by_default(self):
+        a=self.app();authenticate(a,'教师');a.run(timeout=20)
+        self.assertFalse(a.exception);self.assertIn('班级与学生管理',[b.label for b in a.button])
+        self.assertTrue(any(i.value=='① 配置实验与评分点' for i in a.info))
+        next(b for b in a.button if b.label=='班级与学生管理').click().run(timeout=20)
+        self.assertFalse(a.exception);self.assertFalse(any(e.label=='AI评价对照测试' for e in a.expander))
+        self.assertFalse(any(i.label=='显示高级诊断' for i in a.checkbox))
+        self.assertFalse(any(e.label=='教师账号管理' for e in a.expander))
+    def test_missing_setup_secret_cannot_create_admin(self):
+        with patch.dict(os.environ,{'TEACHER_PASSWORD':''}):a=self.app().run(timeout=20)
+        self.assertFalse(a.exception);self.assertTrue(any('尚未配置教师密码' in w.value for w in a.warning))
+        self.assertTrue(next(b for b in a.button if b.label=='建立管理员并保留旧记录').disabled)
 
-    def tearDown(self):
-        db.DB_PATH = self.original_path
-        self.temp_folder.cleanup()
+    def test_expired_session_clears_previous_personal_page_cache(self):
+        app=self.ready();old=app.session_state['auth_token'];accounts.logout(old)
+        app.session_state['submission']={'student_id':'another','code':'private'}
+        app.session_state['current_page']='AI答辩';app.run(timeout=20)
+        self.assertFalse(app.exception);self.assertIsNone(app.session_state['submission'])
+        self.assertTrue(any('会话已过期' in x.value for x in app.info))
+    def test_first_admin_adopts_old_draft_and_keeps_source_file(self):
+        import assignment_drafts
+        import access_control
+        assignment_drafts.save_draft(db.DB_PATH,{'title':'旧实验草稿','description':'尚未发布'})
+        oldpath=assignment_drafts.draft_path(db.DB_PATH)
+        aid=accounts.bootstrap('setup','setup','admin','管理员',PASSWORD,'首个班',teacher_username='teacher-one',teacher_name='王老师',teacher_password=PASSWORD)
+        classroom=accounts.list_classes(aid)[0];cid=classroom['id']
+        with access_control.scope(accounts.get_account(classroom['teacher_id']),cid):
+            self.assertEqual(assignment_drafts.load_draft(db.DB_PATH)['data']['title'],'旧实验草稿')
+            self.assertNotEqual(assignment_drafts.draft_path(db.DB_PATH),oldpath)
+        self.assertTrue(oldpath.exists());self.assertEqual(db.list_assignments()[0]['title'],'求数组中的最大值')
 
-    def _preauthenticated_student(self, student_id="20260001", page="首页"):
-        app = AppTest.from_file(str(self.app_path))
-        app.session_state["auth_role"] = "学生"
-        app.session_state["auth_name"] = "张同学"
-        app.session_state["auth_student_id"] = student_id
-        app.session_state["form_name"] = "张同学"
-        app.session_state["form_student_id"] = student_id
-        app.session_state["current_page"] = page
-        return app.run(timeout=20)
+    def test_teacher_student_provisioning_and_class_creation_work_through_ui(self):
+        app=self.app();authenticate(app,'管理员');app.session_state['current_page']='账号与系统管理';app.run(timeout=20)
+        for label,value in {'新教师账号':'teacher-two','新教师姓名':'李老师','教师初始密码':PASSWORD}.items():
+            next(i for i in app.text_input if i.label==label).set_value(value)
+        next(b for b in app.button if b.label=='开通教师').click().run(timeout=20)
+        self.assertFalse(app.exception);self.assertEqual(len(accounts.list_teachers(1)),2)
+        target=next(t['id'] for t in accounts.list_teachers(1) if t['username']=='teacher-two')
+        selector=next(i for i in app.selectbox if i.label=='任课教师');selector.set_value(target)
+        next(i for i in app.text_input if i.label=='班级名称').set_value('算法二班')
+        next(b for b in app.button if b.label=='保存班级').click().run(timeout=20)
+        self.assertFalse(app.exception);self.assertEqual(accounts.list_classes(target)[0]['name'],'算法二班')
+        for label,value in {'学生学号':'20265555','学生姓名':'陈同学','学生初始密码':PASSWORD}.items():
+            next(i for i in app.text_input if i.label==label).set_value(value)
+        next(b for b in app.button if b.label=='开通学生').click().run(timeout=20)
+        self.assertFalse(app.exception);self.assertTrue(any(x['student_id']=='20265555' for x in accounts.roster(1,1)))
+        token=accounts.login('20265555',PASSWORD);self.assertTrue(accounts.session(token)['must_change'])
+    def test_corrupt_legacy_draft_does_not_block_personal_setup_or_remove_source(self):
+        import assignment_drafts
+        path=assignment_drafts.draft_path(db.DB_PATH);path.write_text('invalid-json',encoding='utf-8')
+        aid=accounts.bootstrap('setup','setup','admin','管理员',PASSWORD,'一班',teacher_username='teacher-one',teacher_name='王老师',teacher_password=PASSWORD)
+        self.assertTrue(accounts.enabled());self.assertTrue(accounts.migration_warning(aid))
+        self.assertEqual(path.read_text(encoding='utf-8'),'invalid-json')
 
-    def _save_completed_report(self, student_id, name):
-        submission_id = db.create_submission_with_questions(
-            student_id,
-            name,
-            "求数组中的最大值",
-            "遍历数组。",
-            "int main(){return 0;}",
-            "2026-09-14 08:00",
-            QUESTIONS,
-        )
-        db.save_report(submission_id, REPORT, "2026-09-14 08:05")
-        return submission_id
+    def test_student_credentials_cannot_create_teacher_entry_session(self):
+        self.ready()
+        app=self.app().run(timeout=20)
+        next(r for r in app.radio if r.label=='请选择登录入口').set_value('教师入口').run(timeout=20)
+        next(i for i in app.text_input if i.label=='教师账号').set_value('20261234')
+        next(i for i in app.text_input if i.label=='密码').set_value(PASSWORD)
+        with db.get_connection() as c:before=c.execute('SELECT COUNT(*) FROM account_sessions').fetchone()[0]
+        next(b for b in app.button if b.label=='进入教师端').click().run(timeout=20)
+        self.assertFalse(app.exception)
+        self.assertTrue(any('请切换到学生入口' in e.value for e in app.error))
+        self.assertNotIn('auth_token',app.session_state)
+        with db.get_connection() as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM account_sessions').fetchone()[0],before)
+        next(r for r in app.radio if r.label=='请选择登录入口').set_value('学生入口').run(timeout=20)
+        self.assertEqual(next(i for i in app.text_input if i.label=='学生学号').value,'')
+        self.assertEqual(next(i for i in app.text_input if i.label=='密码').value,'')
+        next(i for i in app.text_input if i.label=='学生学号').set_value('20261234')
+        next(i for i in app.text_input if i.label=='密码').set_value(PASSWORD)
+        next(b for b in app.button if b.label=='进入学生端').click().run(timeout=20)
+        self.assertFalse(app.exception);self.assertEqual(app.session_state['auth_role'],'学生')
 
-    def test_student_login_locks_identity_and_hides_teacher_pages(self):
-        app = AppTest.from_file(str(self.app_path)).run(timeout=20)
-        self.assertTrue(any(item.value == "登录悟码AI" for item in app.title))
-        self.assertFalse(any(button.label == "教师工作台" for button in app.button))
+    def test_admin_uses_independent_entry_and_cannot_use_student_entry(self):
+        self.ready()
+        app=self.app().run(timeout=20)
+        next(i for i in app.text_input if i.label=='学生学号').set_value('fixture-admin')
+        next(i for i in app.text_input if i.label=='密码').set_value(PASSWORD)
+        next(b for b in app.button if b.label=='进入学生端').click().run(timeout=20)
+        self.assertFalse(app.exception)
+        self.assertTrue(any('请切换到管理员入口' in e.value for e in app.error))
+        self.assertNotIn('auth_token',app.session_state)
+        next(r for r in app.radio if r.label=='请选择登录入口').set_value('管理员入口').run(timeout=20)
+        next(i for i in app.text_input if i.label=='管理员账号').set_value('fixture-admin')
+        next(i for i in app.text_input if i.label=='密码').set_value(PASSWORD)
+        next(b for b in app.button if b.label=='进入管理端').click().run(timeout=20)
+        self.assertFalse(app.exception);self.assertEqual(app.session_state['auth_role'],'管理员')
+        self.assertIn('账号与系统管理',[b.label for b in app.button])
+        self.assertNotIn('教师工作台',[b.label for b in app.button])
 
-        next(item for item in app.text_input if item.label == "姓名").set_value("李同学")
-        next(item for item in app.text_input if item.label == "学号").set_value("20261234")
-        next(
-            button for button in app.button if button.label == "进入学生端"
-        ).click().run(timeout=20)
-
-        labels = [button.label for button in app.button]
-        self.assertIn("实验提交", labels)
-        self.assertIn("学习档案", labels)
-        self.assertNotIn("实验管理", labels)
-        self.assertNotIn("教师工作台", labels)
-        next(
-            button for button in app.button if button.label == "实验提交"
-        ).click().run(timeout=20)
-        name = next(item for item in app.text_input if item.label == "姓名")
-        student_id = next(item for item in app.text_input if item.label == "学号")
-        self.assertEqual(name.value, "李同学")
-        self.assertEqual(student_id.value, "20261234")
-        self.assertTrue(name.disabled)
-        self.assertTrue(student_id.disabled)
-        self.assertEqual(len(app.exception), 0)
-
-        next(
-            button for button in app.button if button.label == "退出登录"
-        ).click().run(timeout=20)
-        self.assertTrue(any(item.value == "登录悟码AI" for item in app.title))
-        self.assertFalse(any(button.label == "实验提交" for button in app.button))
-        self.assertFalse(any(button.label == "教师工作台" for button in app.button))
-        self.assertEqual(len(app.exception), 0)
-
-    def test_teacher_password_rejects_wrong_value_and_opens_only_teacher_pages(self):
-        with patch.dict(os.environ, {"TEACHER_PASSWORD": "classroom-secret"}):
-            app = AppTest.from_file(str(self.app_path)).run(timeout=20)
-            next(
-                item for item in app.radio if item.label == "选择身份"
-            ).set_value("教师").run(timeout=20)
-            password = next(
-                item for item in app.text_input if item.label == "教师密码"
-            )
-            password.set_value("wrong")
-            next(
-                button for button in app.button if button.label == "进入教师端"
-            ).click().run(timeout=20)
-            self.assertTrue(any("密码错误" in item.value for item in app.error))
-
-            next(
-                item for item in app.text_input if item.label == "教师密码"
-            ).set_value("classroom-secret")
-            next(
-                button for button in app.button if button.label == "进入教师端"
-            ).click().run(timeout=20)
-
-        labels = [button.label for button in app.button]
-        self.assertIn("实验管理", labels)
-        self.assertIn("教师工作台", labels)
-        self.assertNotIn("实验提交", labels)
-        self.assertNotIn("学生报告", labels)
-        self.assertNotIn("teacher_login_password", app.session_state)
-        self.assertEqual(len(app.exception), 0)
-
-    def test_missing_teacher_password_keeps_teacher_area_locked(self):
-        with patch.dict(os.environ, {"TEACHER_PASSWORD": ""}):
-            app = AppTest.from_file(str(self.app_path)).run(timeout=20)
-            next(
-                item for item in app.radio if item.label == "选择身份"
-            ).set_value("教师").run(timeout=20)
-        self.assertTrue(
-            any("尚未配置教师密码" in item.value for item in app.warning)
-        )
-        self.assertFalse(any(button.label == "教师工作台" for button in app.button))
-        self.assertEqual(len(app.exception), 0)
-
-    def test_student_route_and_report_queries_are_limited_to_current_identity(self):
-        self._save_completed_report("20260001", "张同学")
-        self._save_completed_report("20260002", "王同学")
-
-        app = self._preauthenticated_student(page="教师工作台")
-        self.assertTrue(any(item.label == "首页" for item in app.button))
-        self.assertFalse(any(item.label == "教师工作台" for item in app.button))
-        next(
-            button for button in app.button if button.label == "学生报告"
-        ).click().run(timeout=20)
-
-        report_selector = next(
-            item for item in app.selectbox if item.label == "选择一份历史报告"
-        )
-        options = [str(item) for item in report_selector.options]
-        self.assertTrue(all("20260001" in item for item in options))
-        self.assertFalse(any("20260002" in item for item in options))
-        self.assertEqual(len(app.exception), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_entry_does_not_disclose_role_before_password_is_verified(self):
+        self.ready()
+        with self.assertRaisesRegex(ValueError,'账号或密码不正确'):
+            accounts.login('20261234','incorrect-password',expected_role='teacher')
+        with self.assertRaisesRegex(ValueError,'不支持的登录入口'):
+            accounts.login('20261234',PASSWORD,expected_role='unknown')

@@ -13,3 +13,4 @@ data/*.db-wal
 .vscode/
 *.zip
 screenshots/
+learnbuddy/mcp_config.generated.json

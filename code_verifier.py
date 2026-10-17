@@ -14,14 +14,20 @@ import subprocess
 import tempfile
 import time
 import uuid
-from datetime import datetime
+import threading
+from app_clock import now_beijing
 from pathlib import Path
+
+import runtime_config
+import execution_guard
+import demo_playback
 
 from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
+if not runtime_config.demo_mode_enabled() and os.getenv("WUMA_INTERACTIVE_DEMO") != "true":
+    load_dotenv(BASE_DIR / ".env")
 
 
 DEFAULT_TIMEOUT_SECONDS = 2.0
@@ -32,6 +38,7 @@ MAX_CUSTOM_INPUT_CHARS = 200_000
 EVIDENCE_PREVIEW_CHARS = 20_000
 DEFAULT_DOCKER_IMAGE = "gcc:13-bookworm"
 DOCKER_STATUS_TIMEOUT_SECONDS = 5.0
+_execution_slots = threading.BoundedSemaphore(2)
 
 CPP_STANDARD_LABELS = {
     "auto": "自动选择",
@@ -95,7 +102,7 @@ def _env_flag(name, default=False):
 
 def execution_enabled():
     """是否允许执行学生代码；默认关闭。"""
-    return _env_flag("CODE_EXECUTION_ENABLED", False)
+    return not demo_playback.active() and not runtime_config.demo_mode_enabled() and _env_flag("CODE_EXECUTION_ENABLED", False)
 
 
 def compiler_name():
@@ -143,7 +150,7 @@ def _local_runtime_status():
     return {
         "available": True,
         "label": "本机代码验证可用",
-        "detail": f"编译器：{path}",
+        "detail": f"编译器：{path}；运行内存256MB，最多16个进程，限时与输出保护；本机模式不隔离文件和网络。",
         "compiler": path,
     }
 
@@ -316,7 +323,7 @@ def _case_scoring_metadata(test_cases):
     comparable_indices = [
         index
         for index, case in enumerate(test_cases)
-        if case.get("compare_output", True)
+        if case.get("compare_output", True) and not case.get("count_only")
     ]
     weights = [0] * len(test_cases)
     explicit = []
@@ -352,6 +359,17 @@ def _case_scoring_metadata(test_cases):
         }
         for index, case in enumerate(test_cases)
     ]
+
+
+def formal_test_cases(assignment):
+    """Freeze all official cases; visibility is independent of pass/fail counting."""
+    public = [{"name": sample.get("name") or f"公开样例{index}",
+               "group": "公开样例", "input": sample.get("input", ""),
+               "expected_output": sample.get("output", ""), "visibility": "公开", "count_only": True}
+              for index, sample in enumerate(assignment.get("public_samples", []), 1)]
+    hidden = [{**case, "weight": 0, "visibility": "隐藏", "count_only": True}
+              for case in assignment.get("test_cases", [])]
+    return public + hidden
 
 
 def _verdict_code(status):
@@ -403,7 +421,7 @@ def _base_result(status, message, compiler, requested_standard="auto"):
         "max_score": 0,
         "group_scores": [],
         "cases": [],
-        "executed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "executed_at": now_beijing().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -446,6 +464,7 @@ def _verify_cpp_code_local(code, test_cases, cpp_standard="auto"):
     )
 
     result = _base_result("未执行", "", compiler, requested_standard)
+    deadline = time.monotonic() + _bounded_float_env("CODE_EXECUTION_TOTAL_TIMEOUT_SECONDS", 30, 3, 120)
     result["enabled"] = True
     scoring_metadata = _case_scoring_metadata(test_cases)
     result["max_score"] = sum(item["weight"] for item in scoring_metadata)
@@ -459,7 +478,7 @@ def _verify_cpp_code_local(code, test_cases, cpp_standard="auto"):
         for item in scoring_metadata
     ]
     result["group_scores"] = _group_score_summary(empty_group_cases)
-    with tempfile.TemporaryDirectory(prefix="wuma_verify_") as folder:
+    with execution_guard.TemporaryWorkspace(prefix="wuma_verify_") as folder:
         workdir = Path(folder)
         source_path = workdir / "main.cpp"
         program_path = workdir / ("main.exe" if os.name == "nt" else "main")
@@ -473,23 +492,9 @@ def _verify_cpp_code_local(code, test_cases, cpp_standard="auto"):
         for candidate_standard, candidate_alias in _standard_attempts(requested_standard):
             candidate_flag = f"-std={candidate_alias}"
             try:
-                candidate_result = subprocess.run(
-                    [
-                        compiler,
-                        candidate_flag,
-                        "-O2",
-                        str(source_path),
-                        "-o",
-                        str(program_path),
-                    ],
-                    cwd=workdir,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=compile_timeout,
-                    shell=False,
-                    creationflags=_creation_flags(),
+                candidate_result = _compile_local(
+                    [compiler, candidate_flag, "-O2", str(source_path), "-o", str(program_path)],
+                    workdir, min(compile_timeout, max(0.01, deadline - time.monotonic())),
                 )
             except subprocess.TimeoutExpired:
                 result["overall_status"] = "编译超时"
@@ -578,47 +583,26 @@ def _verify_cpp_code_local(code, test_cases, cpp_standard="auto"):
             zip(test_cases, scoring_metadata),
             start=1,
         ):
+            if deadline - time.monotonic() < timeout_seconds:
+                result.update(overall_status="评测中止", message="整次评测超过时间上限，请先排查超时测试点。", cases=case_results)
+                return result
             case_output_limit = _case_output_limit(case, max_output)
             stdout_path = workdir / f"stdout_{index}.txt"
             stderr_path = workdir / f"stderr_{index}.txt"
             started = time.perf_counter()
-            with (
-                stdout_path.open("w", encoding="utf-8") as stdout_file,
-                stderr_path.open("w", encoding="utf-8") as stderr_file,
-            ):
-                try:
-                    process = subprocess.Popen(
-                        [str(program_path)],
-                        cwd=workdir,
-                        stdin=subprocess.PIPE,
-                        stdout=stdout_file,
-                        stderr=stderr_file,
-                        text=True,
-                        encoding="utf-8",
-                        errors="replace",
-                        shell=False,
-                        start_new_session=os.name == "posix",
-                        preexec_fn=_execution_limits(
-                            timeout_seconds,
-                            case_output_limit,
-                        ),
-                        creationflags=_creation_flags(),
-                    )
-                    try:
-                        process.communicate(
-                            input=str(case.get("input", "")),
-                            timeout=timeout_seconds,
-                        )
-                        timed_out = False
-                    except subprocess.TimeoutExpired:
-                        timed_out = True
-                        _stop_process(process)
-                except OSError as error:
-                    process = None
-                    timed_out = False
-                    launch_error = str(error)
-                else:
-                    launch_error = ""
+            try:
+                process, timed_out, output_overflow = execution_guard.run_bounded(
+                    [str(program_path)], workdir,
+                    str(case.get("input", ""))[:MAX_CUSTOM_INPUT_CHARS],
+                    min(timeout_seconds, max(0.01, deadline - time.monotonic())),
+                    max(65536, case_output_limit * 4),
+                )
+            except OSError as error:
+                result.update(overall_status="环境不可用", message=f"执行保护未完成：{error}", cases=case_results)
+                return result
+            launch_error = ""
+            stdout_path.write_text(process.stdout, encoding="utf-8")
+            stderr_path.write_text(process.stderr, encoding="utf-8")
 
             actual_output, stdout_too_long = _read_limited(
                 stdout_path,
@@ -631,7 +615,11 @@ def _verify_cpp_code_local(code, test_cases, cpp_standard="auto"):
             duration_ms = round((time.perf_counter() - started) * 1000)
             expected_output = str(case.get("expected_output", ""))
 
-            if launch_error:
+            if output_overflow:
+                case_status = "输出过长"
+                message = f"输出达到资源上限，程序已终止；最多保留{case_output_limit}个字符。"
+                exit_code = None
+            elif launch_error:
                 case_status = "运行错误"
                 message = f"无法启动程序：{launch_error}"
                 exit_code = None
@@ -663,6 +651,7 @@ def _verify_cpp_code_local(code, test_cases, cpp_standard="auto"):
             case_results.append(
                 {
                     "name": str(case.get("name") or f"样例{index}")[:80],
+                    "visibility": case.get("visibility", "隐藏"),
                     "group": scoring["group"],
                     "weight": scoring["weight"],
                     "score": scoring["weight"] if case_status == "通过" else 0,
@@ -720,6 +709,18 @@ def _verify_cpp_code_local(code, test_cases, cpp_standard="auto"):
         return result
 
 
+def _compile_local(command, workdir, timeout):
+    completed, timed_out, overflow = execution_guard.run_bounded(
+        command, workdir, "", timeout, 262144, memory_mb=512, process_limit=64,
+    )
+    if timed_out:
+        raise subprocess.TimeoutExpired(command, timeout)
+    if overflow:
+        completed.returncode = completed.returncode or 1
+        completed.stderr = "编译诊断输出超过上限。\n" + completed.stderr[:4000]
+    return completed
+
+
 def _run_cpp_code_local(code, standard_input="", cpp_standard="auto"):
     """编译并使用学生自定义输入运行一次，不与标准答案比较。"""
     result = _verify_cpp_code_local(
@@ -751,12 +752,18 @@ class LocalCppExecutionBackend:
         return {**status, "backend_id": self.backend_id}
 
     def verify_cpp_code(self, code, test_cases, cpp_standard="auto"):
-        result = _verify_cpp_code_local(code, test_cases, cpp_standard)
+        try:
+            result = _verify_cpp_code_local(code, test_cases, cpp_standard)
+        except execution_guard.ProtectionError as error:
+            result = _base_result("环境不可用", str(error), compiler_name(), cpp_standard)
         result["execution_backend"] = self.backend_id
         return result
 
     def run_cpp_code(self, code, standard_input="", cpp_standard="auto"):
-        result = _run_cpp_code_local(code, standard_input, cpp_standard)
+        try:
+            result = _run_cpp_code_local(code, standard_input, cpp_standard)
+        except execution_guard.ProtectionError as error:
+            result = _base_result("环境不可用", str(error), compiler_name(), cpp_standard)
         result["execution_backend"] = self.backend_id
         return result
 
@@ -992,6 +999,8 @@ def _monitor_docker_program(
     timed_out = False
     output_too_long = False
     launch_error = ""
+    input_worker = None
+    started = time.monotonic()
     with (
         stdout_path.open("w", encoding="utf-8") as stdout_file,
         stderr_path.open("w", encoding="utf-8") as stderr_file,
@@ -1008,13 +1017,17 @@ def _monitor_docker_program(
                 shell=False,
                 creationflags=_creation_flags(),
             )
-            try:
-                process.stdin.write(str(standard_input or ""))
-                process.stdin.close()
-            except (BrokenPipeError, OSError):
-                pass
+            def send_input():
+                try:
+                    process.stdin.write(str(standard_input or "")[:MAX_CUSTOM_INPUT_CHARS])
+                except (BrokenPipeError, OSError, ValueError):
+                    pass
+                finally:
+                    process.stdin.close()
+            input_worker = threading.Thread(target=send_input, daemon=True)
+            input_worker.start()
 
-            deadline = time.monotonic() + timeout_seconds
+            deadline = started + timeout_seconds
             byte_limit = max(65536, max_output * 4)
             while process.poll() is None:
                 if time.monotonic() >= deadline:
@@ -1036,6 +1049,14 @@ def _monitor_docker_program(
                     _stop_process(process)
         except OSError as error:
             launch_error = str(error)
+            if process is not None and process.poll() is None:
+                _force_remove_container(executable, container_name)
+                _stop_process(process)
+        finally:
+            if input_worker:
+                input_worker.join(timeout=2)
+                if input_worker.is_alive():
+                    launch_error = "输入管道未完成清理，已停止评测。"
 
     return {
         "process": process,
@@ -1119,6 +1140,7 @@ def _verify_cpp_code_docker(code, test_cases, cpp_standard="auto"):
     image = docker_cpp_image()
     scoring_metadata = _case_scoring_metadata(test_cases)
     result = _base_result("未执行", "", compiler, requested_standard)
+    deadline = time.monotonic() + _bounded_float_env("CODE_EXECUTION_TOTAL_TIMEOUT_SECONDS", 30, 3, 120)
     result["enabled"] = True
     result["max_score"] = sum(item["weight"] for item in scoring_metadata)
     result["group_scores"] = _group_score_summary(
@@ -1160,7 +1182,7 @@ def _verify_cpp_code_docker(code, test_cases, cpp_standard="auto"):
                     text=True,
                     encoding="utf-8",
                     errors="replace",
-                    timeout=compile_timeout,
+                    timeout=min(compile_timeout, max(0.01, deadline - time.monotonic())),
                     shell=False,
                     creationflags=_creation_flags(),
                 )
@@ -1270,6 +1292,9 @@ def _verify_cpp_code_docker(code, test_cases, cpp_standard="auto"):
             zip(test_cases, scoring_metadata),
             start=1,
         ):
+            if deadline - time.monotonic() < timeout_seconds:
+                result.update(overall_status="评测中止", message="整次评测超过时间上限，请先排查超时测试点。", cases=case_results)
+                return result
             case_output_limit = _case_output_limit(case, max_output)
             stdout_path = workdir / f"stdout_{index}.txt"
             stderr_path = workdir / f"stderr_{index}.txt"
@@ -1295,7 +1320,7 @@ def _verify_cpp_code_docker(code, test_cases, cpp_standard="auto"):
                 str(case.get("input", "")),
                 stdout_path,
                 stderr_path,
-                timeout_seconds,
+                min(timeout_seconds, max(0.01, deadline - time.monotonic())),
                 case_output_limit,
                 executable,
                 container_name,
@@ -1360,6 +1385,7 @@ def _verify_cpp_code_docker(code, test_cases, cpp_standard="auto"):
             case_results.append(
                 {
                     "name": str(case.get("name") or f"样例{index}")[:80],
+                    "visibility": case.get("visibility", "隐藏"),
                     "group": scoring["group"],
                     "weight": scoring["weight"],
                     "score": scoring["weight"] if case_status == "通过" else 0,
@@ -1509,12 +1535,41 @@ def get_execution_backend():
 
 
 def runtime_status():
+    if demo_playback.active():
+        return {"available": False, "label": "固定案例评测证据回放", "detail": "在线不执行任意代码；可在实验提交页载入本例已保存的真实判题结果。"}
+    if runtime_config.demo_mode_enabled():
+        return {"available": False, "label": "赛事Demo已关闭代码执行", "detail": "请使用完整本地版进行真实判题。"}
     return get_execution_backend().runtime_status()
 
 
 def verify_cpp_code(code, test_cases, cpp_standard="auto"):
-    return get_execution_backend().verify_cpp_code(code, test_cases, cpp_standard)
+    if demo_playback.active():
+        return demo_playback.verification(code, test_cases, cpp_standard)
+    if runtime_config.demo_mode_enabled():
+        return _base_result("未启用", "赛事只读Demo不执行学生代码。", compiler_name(), cpp_standard)
+    if any(len(str(case.get("input", ""))) > MAX_CUSTOM_INPUT_CHARS for case in test_cases):
+        return _base_result("未执行", f"测试输入超过{MAX_CUSTOM_INPUT_CHARS:,}个字符；未截断，也未执行。请教师缩小测试材料。", compiler_name(), cpp_standard)
+    if not _execution_slots.acquire(timeout=10):
+        return _base_result("执行繁忙", "判题任务较多，请稍后重试。", compiler_name(), cpp_standard)
+    try:
+        result = get_execution_backend().verify_cpp_code(code, test_cases, cpp_standard)
+        if test_cases and all(case.get("count_only") for case in test_cases):
+            result["scoring_mode"] = "pass_only"
+        return result
+    finally:
+        _execution_slots.release()
 
 
 def run_cpp_code(code, standard_input="", cpp_standard="auto"):
-    return get_execution_backend().run_cpp_code(code, standard_input, cpp_standard)
+    if demo_playback.active():
+        return _base_result("未执行", "在线固定案例演示不运行任意代码，请使用完整本地版。", "未执行", cpp_standard)
+    if runtime_config.demo_mode_enabled():
+        return _base_result("未启用", "赛事只读Demo不执行学生代码。", compiler_name(), cpp_standard)
+    if len(str(standard_input or "")) > MAX_CUSTOM_INPUT_CHARS:
+        return _base_result("未执行", f"自定义输入超过{MAX_CUSTOM_INPUT_CHARS:,}个字符；未截断，也未执行。", compiler_name(), cpp_standard)
+    if not _execution_slots.acquire(timeout=10):
+        return _base_result("执行繁忙", "判题任务较多，请稍后重试。", compiler_name(), cpp_standard)
+    try:
+        return get_execution_backend().run_cpp_code(code, standard_input, cpp_standard)
+    finally:
+        _execution_slots.release()

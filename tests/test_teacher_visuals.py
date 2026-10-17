@@ -4,19 +4,20 @@ import unittest
 from pathlib import Path
 
 import pandas as pd
+import teacher_insights as insights
 
 
 class TeacherVisualTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         source = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
-        names = {"compact_code_result", "teacher_summary_cards_html", "teacher_bar_rows_html",
+        names = {"compact_code_result", "understanding_text", "teacher_summary_cards_html", "teacher_bar_rows_html",
                  "build_teacher_dimension_rows", "build_teacher_weakness_rows", "build_teacher_hidden_case_rows"}
         module = ast.parse(source)
         nodes = [node for node in module.body if isinstance(node, ast.FunctionDef) and node.name in names]
         colors = next(node.value for node in module.body if isinstance(node, ast.Assign)
                       and any(isinstance(target, ast.Name) and target.id == "DIMENSION_COLORS" for target in node.targets))
-        cls.helpers = {"html": html, "DIMENSION_COLORS": ast.literal_eval(colors)}
+        cls.helpers = {"insights": insights, "html": html, "DIMENSION_COLORS": ast.literal_eval(colors)}
         exec(compile(ast.Module(body=nodes, type_ignores=[]), "app.py", "exec"), cls.helpers)
 
     def test_teacher_decision_and_score_are_complete_separate_text_and_escaped(self):

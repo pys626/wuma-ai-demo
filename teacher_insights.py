@@ -1,9 +1,11 @@
 """从已保存证据生成教师摘要；不调用模型、不改写历史评价。"""
 import re
+import defense_evidence
+from text_formatting import clean_prose, join_clauses
 
 
 def brief(value, limit=72):
-    text = " ".join(str(value or "").split())
+    text = clean_prose(" ".join(str(value or "").split()))
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
@@ -25,24 +27,52 @@ def question_finding(item, index):
     missing += [p.get("reference_point", "") for p in points if p.get("status") == "部分掌握"]
     if not item.get("answer") or not ev:
         return (2, "证据不足", f"{source}：尚无完整回答与评价，不能据此认定未掌握。")
+    if ev.get("premise_issue"):
+        return (1, "待核查", f"{source}：题目或参考要点前提待教师核查：{brief(ev['premise_issue'], 90)}")
     if ev.get("confidence") not in {"高", "中"}:
         detail = errors[0] if errors else missing[0] if missing else "评价置信度低或未记录"
-        return (2, "证据不足", f"{source}：{brief(detail, 55)}；需核查原回答。")
+        return (2, "证据不足", join_clauses([f"{source}：{brief(detail, 55)}", "需核查原回答"], sentence=True))
+    if item.get("reference_dimensions") and any(
+        p.get("status") in defense_evidence.POINT_SCORES and not defense_evidence.quote_source(
+            p.get("answer_quote"), item.get("answer"), item.get("follow_up_answer")
+        ) for p in points
+    ):
+        return (2, "证据不足", f"{source}：AI判断缺少可在实际回答中核对的原文，不能据此认定掌握或理解错误。")
+    if points and all(p.get("status") == "掌握" for p in points) and (errors or missing):
+        return (1, "待核查", join_clauses([f"{source}：AI逐点标记全部掌握，但又记录了错误或遗漏：{brief((errors or missing)[0], 55)}", "需教师核对原回答"], sentence=True))
     if errors:
         return (0, "需要巩固", f"{source} · AI标记理解错误：{brief(errors[0], 60)}")
     if missing:
-        return (3, "需要巩固", f"{source} · 回答遗漏：{brief(missing[0], 60)}")
+        return (3, "需要巩固", join_clauses([f"{source} · 仍需补充：{brief(missing[0], 60)}", "分数反映整体表现，遗漏要点仍需补充"], sentence=True))
     if not points or any(p.get("status") != "掌握" for p in points):
         return (2, "证据不足", f"{source}：部分参考点缺少直接证据，请展开核查。")
-    return (8, "已有掌握证据", f"{source}：已记录参考点均有掌握证据。")
+    return (8, "要点已掌握", f"{source}：本次回答覆盖了已评估的关键要点，未发现明确错误或遗漏。可展开查看回答与判断依据。")
+
+
+def mastery_statement(status, scope="本次答辩考查的要点"):
+    """为展示补全学生主体与本次作答范围，保留内部状态契约。"""
+    return {
+        "要点已掌握": f"该学生的回答体现其已掌握{scope}",
+        "需要巩固": f"该学生对{scope}的回答有错误或遗漏，需核查并补充",
+        "证据不足": "作答证据不足，暂不能判断该学生的掌握情况",
+        "待核查": "该学生的作答证据或题目前提需要教师核查",
+        "相对较弱（整体良好）": "该学生整体作答良好，部分能力维度的AI评分相对较低",
+    }.get(status, f"该学生本次答辩的AI标记：{status}")
 
 
 def mastery_summary(report, qa_records):
     if not report:
-        return {"status": "证据不足", "text": "答辩尚未完成", "dimension": ""}
+        return {"status": "证据不足", "text": "该次答辩报告尚未生成，暂无完整AI评价", "dimension": ""}
     findings = [question_finding(item, i) for i, item in enumerate(qa_records, 1)]
-    if any(status == "需要巩固" for _, status, _ in findings):
-        return {"status": "需要巩固", "text": "回答有具体错误或遗漏，见逐题证据", "dimension": ""}
+    concerns = [detail for _, status, detail in findings if status == "需要巩固"]
+    if concerns:
+        return {"status": "需要巩固", "text": join_clauses(concerns[:3]), "dimension": "", "concerns": concerns}
+    conflicts = [detail for _, status, detail in findings if status == "待核查"]
+    if conflicts:
+        return {"status": "待核查", "text": join_clauses(conflicts[:3]), "dimension": "", "concerns": conflicts}
+    if report.get("assessment_complete") is False:
+        missing = [name for name, value in (report.get("dimensions") or {}).items() if value is None]
+        return {"status": "证据不足", "text": "评价尚不完整：" + "、".join(missing) + "缺少充分作答依据", "dimension": ""}
     if not findings or any(status == "证据不足" for _, status, _ in findings):
         return {"status": "证据不足", "text": "现有回答或评价不足以确认掌握", "dimension": ""}
     dimensions = report.get("dimensions") or {}
@@ -51,9 +81,23 @@ def mastery_summary(report, qa_records):
         return {"status": "证据不足", "text": "未记录能力维度评分", "dimension": ""}
     lowest = min(scores, key=scores.get)
     if min(scores.values()) >= 80:
-        text = "各维度均衡，已有掌握证据" if len(set(scores.values())) == 1 else f"整体良好，{lowest}相对较低（{scores[lowest]}/100）"
-        return {"status": "相对较弱（整体良好）" if len(set(scores.values())) > 1 else "已有掌握证据", "text": text, "dimension": lowest if len(set(scores.values())) > 1 else ""}
+        text = "该学生的本次回答覆盖已评估要点，各维度AI评分均衡" if len(set(scores.values())) == 1 else f"该学生整体作答良好，{lowest}的AI评分相对较低（{scores[lowest]}/100）"
+        return {"status": "相对较弱（整体良好）" if len(set(scores.values())) > 1 else "要点已掌握", "text": text, "dimension": lowest if len(set(scores.values())) > 1 else ""}
     return {"status": "待核查", "text": f"{lowest}评分较低，但缺少对应错误证据，需核对评价", "dimension": lowest}
+
+
+def pending_ai_disputes(feedbacks, teacher_review=None):
+    """仅反馈编号快照内的疑问已复核；回复、已阅不改变复核状态。"""
+    cutoff = (teacher_review or {}).get("feedback_cutoff_id")
+    pending = []
+    for item in feedbacks:
+        if item.get("category") != "对AI结果有疑问":
+            continue
+        covered = (item["id"] <= cutoff if cutoff is not None else
+                   bool(teacher_review and item["created_at"] < teacher_review["reviewed_at"]))
+        if not covered:
+            pending.append(item)
+    return pending
 
 
 def teacher_review_state(record, report=None, qa_records=None, mastery=None):
@@ -66,6 +110,9 @@ def teacher_review_state(record, report=None, qa_records=None, mastery=None):
         }
 
     reasons = []
+    pending_disputes = int(record.get("pending_ai_dispute_count") or 0)
+    if pending_disputes:
+        reasons.append(f"学生对AI结果提出疑问（{pending_disputes}条尚未复核）")
     if record.get("review_required"):
         reasons.append("诊断报告标记需要教师复核")
     if int(record.get("attempt_number") or 1) > 1:
@@ -73,19 +120,19 @@ def teacher_review_state(record, report=None, qa_records=None, mastery=None):
     if mastery is None and report is not None and qa_records is not None:
         mastery = mastery_summary(report, qa_records)
     if mastery and mastery.get("status") in {"需要巩固", "证据不足", "待核查"}:
-        reasons.append(f"掌握证据状态为{mastery['status']}")
+        reasons.append("AI根据该学生本次答辩判断：" + mastery_statement(mastery["status"]))
 
-    if record.get("teacher_reviewed"):
+    if record.get("teacher_reviewed") and not pending_disputes:
         return {
             "状态": "已复核",
             "是否当前待办": False,
-            "原因": "；".join(reasons) if reasons else "教师已完成常规抽查",
+            "原因": join_clauses(reasons) if reasons else "教师已完成常规抽查",
         }
     if reasons:
         return {
             "状态": "待复核",
             "是否当前待办": True,
-            "原因": "；".join(reasons),
+            "原因": join_clauses(reasons),
         }
     return {
         "状态": "常规抽查",
@@ -102,10 +149,12 @@ def needs_teacher_review(record, report=None, qa_records=None, mastery=None):
 
 def ranked_concerns(record, preliminary, report, qa_records):
     candidates = []
+    if record.get("pending_ai_dispute_count"):
+        candidates.append((-1, "学生对AI结果有疑问｜需结合反馈原文、实际代码和答辩依据完成教师复核。"))
     for i, item in enumerate(qa_records, 1):
         priority, status, detail = question_finding(item, i)
-        if status != "已有掌握证据":
-            candidates.append((priority, f"{status}｜{detail}"))
+        if status != "要点已掌握":
+            candidates.append((priority, f"AI根据该学生本题回答判断：{mastery_statement(status, '本题考查的要点')}｜{detail}"))
     for reason in strings((report or {}).get("review_reasons")):
         candidates.append((1, "报告复核原因（待核实）：" + brief(reason, 60)))
     code_status = (record.get("code_verification") or {}).get("overall_status", "未执行")
@@ -158,11 +207,11 @@ def comparable_points(old_questions, new_questions):
             if "理解错误" in new_states:
                 conclusion = "本次仍有理解错误证据" if "理解错误" in old_states else "本次出现理解错误证据"
             elif new_states == {"掌握"}:
-                conclusion = "原误解已有纠正证据（待教师确认）" if "理解错误" in old_states else "本次已有掌握证据"
+                conclusion = "原误解已有纠正证据（待教师确认）" if "理解错误" in old_states else "AI判断该学生本次回答体现其已掌握此考查要点"
             elif "部分掌握" in new_states:
                 conclusion = "本次仍需补充说明"
         def describe(items):
-            return "；".join(f"第{p['question']}题 · {p['status']}：{p['evidence']}" for p in items) or "未覆盖"
+            return join_clauses(f"第{p['question']}题 · {p['status']}：{p['evidence']}" for p in items) or "未覆盖"
         rows.append({"参考知识点": (before or after)[0]["label"], "上次证据": describe(before), "本次证据": describe(after), "变化判断": conclusion})
     return rows
 

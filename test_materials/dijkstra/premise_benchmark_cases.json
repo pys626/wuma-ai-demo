@@ -1,0 +1,79 @@
+{
+  "version": "dijkstra_premise_comparison_v1",
+  "problem": "Dijkstra：有向带权图的最短路径（进阶实验）",
+  "experiment_context": {
+    "description": "给定一张含n个节点、m条有向边的图，求从起点s到终点t的最短距离。边权均非负，允许零权边、平行边和自环。\n必须使用邻接表和优先队列实现Dijkstra算法；不使用普通BFS、Floyd或Bellman-Ford替代。找不到路径时输出-1。每次运行只处理一张图。",
+    "requirements": [
+      "使用单文件C++14程序，使用邻接表和最小优先队列自行实现Dijkstra算法。",
+      "dist保存从起点到各节点的当前最小距离；起点初始化为0，其余初始化为足够大的INF。",
+      "优先队列按距离递增取出状态，忽略已过期的状态，仅在严格改善距离时更新和入队。",
+      "保留有向边的方向，正确处理平行边、自环、零权环、不可达和s=t。",
+      "边权、距离、候选距离均采用long long，正确输出超过32位整数范围的答案。",
+      "解题思路为必做，说明松弛条件、最小堆的作用、过期状态和非负边权前提；教师可在发布前改为选做。",
+      "实验报告为选做，可补充测试和复杂度分析；公开与隐藏测试须全部通过后再进入AI答辩。"
+    ],
+    "input_format": "第一行输入四个整数n m s t。\n接下来m行，每行输入u v w，表示一条从u指向v、权重为w的有向边。节点编号从1到n。",
+    "output_format": "输出一个整数：从s到t的最短距离；不可达时输出-1。s=t时最短距离为0。最后换行，不输出路径、输入提示或其他文字。",
+    "constraints_text": "1 ≤ n ≤ 2000，0 ≤ m ≤ 10000，1 ≤ s,t,u,v ≤ n。\n0 ≤ w ≤ 1000000000；输入保证完整且合法。\n允许平行边、自环、零权边和零权环；图不保证连通。\n最短距离可能超过32位有符号整数范围，须用long long。不存在负权边。"
+  },
+  "code": "#include <iostream>\n#include <vector>\n#include <queue>\n#include <functional>\n#include <limits>\n#include <utility>\nusing namespace std;\n\nusing ll = long long;\nstruct Edge {\n    int to;\n    ll weight;\n};\nusing Graph = vector<vector<Edge>>;\nconst ll INF = numeric_limits<ll>::max();\n\nll shortestPath(const Graph& graph, int source, int target) {\n    vector<ll> dist(graph.size(), INF);\n    using State = pair<ll, int>;\n    priority_queue<State, vector<State>, greater<State>> pending;\n    dist[source] = 0;\n    pending.push({0, source});\n\n    while (!pending.empty()) {\n        State current = pending.top();\n        pending.pop();\n        ll distance = current.first;\n        int u = current.second;\n        // 距离改善后，堆里仍可能保留这个节点的旧状态。\n        if (distance != dist[u]) {\n            continue;\n        }\n        if (u == target) {\n            return distance;\n        }\n        for (const Edge& edge : graph[u]) {\n            ll candidate = distance + edge.weight;\n            if (candidate < dist[edge.to]) {\n                dist[edge.to] = candidate;\n                pending.push({candidate, edge.to});\n            }\n        }\n    }\n    return -1;\n}\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    int n, m, source, target;\n    if (!(cin >> n >> m >> source >> target)) {\n        return 0;\n    }\n    if (n < 1 || n > 2000 || m < 0 || m > 10000 ||\n        source < 1 || source > n || target < 1 || target > n) {\n        return 0;\n    }\n    Graph graph(n + 1);\n    for (int i = 0; i < m; ++i) {\n        int u, v;\n        ll weight;\n        if (!(cin >> u >> v >> weight) || u < 1 || u > n ||\n            v < 1 || v > n || weight < 0 || weight > 1000000000LL) {\n            return 0;\n        }\n        graph[u].push_back({v, weight});\n    }\n    cout << shortestPath(graph, source, target) << '\\n';\n    return 0;\n}\n",
+  "cases": [
+    {
+      "kind": "answer",
+      "case": "错误前提：不可达节点以INF参与松弛",
+      "number": 1,
+      "acceptance_mode": "invalid_premise",
+      "question": {
+        "dimension": "分析与修改能力",
+        "question": "这份代码将INF设为numeric_limits<ll>::max()。不可达节点的dist仍是INF，因此这些节点也会以INF进入pending，并在松弛时执行distance + edge.weight，正边权必然使该加法溢出。请说明这种溢出为何会发生，并给出修复方案。",
+        "reference_points": [
+          "说明不可达节点以INF进入pending，导致distance为INF时加正边权溢出。",
+          "通过降低INF或增加加法判断，修复这份代码在合法输入下的上述溢出。"
+        ],
+        "reference_dimensions": [
+          "分析与修改能力",
+          "分析与修改能力"
+        ]
+      },
+      "answer": "distance来自pending.top()取出的current.first，而不是遍历dist数组后直接相加。初始只有(0, source)入队，之后只有candidate < dist[edge.to]的严格改善才更新并入队。不可达节点没有从起点到它的路径，不能被这些松弛发现，所以不会以INF入队，也不会用INF执行松弛加法。数组里保留INF不代表这个值参与运算。\n本题n≤2000、边权非负且≤10^9。最短路径可以去掉非负环，至多n-1条边；有效出堆状态的distance≤1999×10^9，再加一条边得到candidate≤2000×10^9=2×10^12，远低于long long上限。仅将INF设为numeric_limits<ll>::max()并保持这份入队逻辑，在合法输入下不会发生所述INF加正权溢出。超出题目范围的改动需要另行核对。",
+      "expected": [],
+      "acceptance_expected": [
+        "明确指出题目或参考要点前提有误",
+        "置信度低",
+        "停止基于错误前提追问",
+        "暂不认定本题充分掌握，交教师核查"
+      ],
+      "manual_check": "前提说明必须依据实际入队和出堆路径，指出不可达节点不会以INF参与加法；反馈应认可有依据的反驳，不能坚持学生必须承认溢出。"
+    },
+    {
+      "kind": "answer",
+      "case": "正常对照：核对INF与实际执行路径",
+      "number": 2,
+      "acceptance_mode": "valid_premise",
+      "question": {
+        "dimension": "分析与修改能力",
+        "question": "这份代码将INF设为numeric_limits<ll>::max()。不可达节点的dist保留INF，是否就意味着distance + edge.weight会用INF参与加法并溢出？请结合distance的来源、pending的入队条件和本题数据范围，说明这份代码在合法输入下是否安全。",
+        "reference_points": [
+          "distance来自队列出堆状态；只有起点0和严格改善后的有限距离入队，不可达节点不入队，dist保存INF不代表INF参与加法。",
+          "非负边权下最短路径可去环，distance≤1999×10^9，candidate≤2000×10^9=2×10^12；小于long long上限，合法输入下设INF为最大值仍安全。"
+        ],
+        "reference_dimensions": [
+          "分析与修改能力",
+          "分析与修改能力"
+        ]
+      },
+      "answer": "distance来自pending.top()取出的current.first，而不是遍历dist数组后直接相加。初始只有(0, source)入队，之后只有candidate < dist[edge.to]的严格改善才更新并入队。不可达节点没有从起点到它的路径，不能被这些松弛发现，所以不会以INF入队，也不会用INF执行松弛加法。数组里保留INF不代表这个值参与运算。\n本题n≤2000、边权非负且≤10^9。最短路径可以去掉非负环，至多n-1条边；有效出堆状态的distance≤1999×10^9，再加一条边得到candidate≤2000×10^9=2×10^12，远低于long long上限。仅将INF设为numeric_limits<ll>::max()并保持这份入队逻辑，在合法输入下不会发生所述INF加正权溢出。超出题目范围的改动需要另行核对。",
+      "expected": [
+        "掌握",
+        "掌握"
+      ],
+      "acceptance_expected": [
+        "题目前提无误",
+        "置信度高或中",
+        "两个要点均掌握且原文可核对",
+        "认可充分回答，不追加无必要追问"
+      ],
+      "manual_check": "本题是开放核查问题，没有断言不可达节点会入队。模型应认可两段正确解释，不能把正常提问误标为错误前提。"
+    }
+  ]
+}

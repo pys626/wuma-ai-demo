@@ -1,0 +1,21 @@
+{
+  "validation_date": "2026-10-08",
+  "scope": "本次定向回归",
+  "tests_passed": 144,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "reference_public_cases": 3,
+  "reference_hidden_cases": 8,
+  "reference_random_cases": 12,
+  "reference_inputs_passed": 23,
+  "independent_oracle": "Bellman-Ford",
+  "invalid_implementations": {
+    "添加反向边": "WA",
+    "使用32位距离": "WA",
+    "首次发现终点即返回": "WA",
+    "零权环使用非严格松弛": "TLE"
+  },
+  "real_ai_evaluation_performed": false,
+  "real_teaching_database_modified": false
+}

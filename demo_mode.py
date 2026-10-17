@@ -1,9 +1,12 @@
 """Public demo helpers and deterministic synthetic teaching records."""
 
-import os
+import sqlite3
 import threading
+from contextlib import closing
+from pathlib import Path
 
 import database as db
+import runtime_config
 
 
 DEMO_STUDENT_NAME = "张同学"
@@ -11,23 +14,71 @@ DEMO_STUDENT_ID = "20260001"
 DEMO_TEACHER_NAME = "演示教师"
 
 _SEED_LOCK = threading.Lock()
+_DEMO_MARKER = "synthetic-v1"
 
 
-def _env_flag(name, default=False):
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+class DemoDatabaseError(ValueError):
+    """The public entry must never expose an unmarked business database."""
+
+
+def validate_demo_database(path):
+    path = Path(path).resolve()
+    business = runtime_config.DEFAULT_BUSINESS_DB.resolve()
+    if path == business or (
+        path.exists() and business.exists() and path.samefile(business)
+    ):
+        raise DemoDatabaseError("赛事Demo不能使用业务数据库，请指定独立的演示数据库。")
+    if not path.is_file():
+        raise DemoDatabaseError("演示数据库尚未准备，请通过 launch.py 启动或选择新的数据库路径。")
+    try:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as connection:
+            row = connection.execute(
+                "SELECT value FROM wuma_demo_metadata WHERE key = 'purpose'"
+            ).fetchone()
+    except sqlite3.Error as error:
+        raise DemoDatabaseError(
+            "该数据库没有可验证的合成演示标记或文件已损坏。"
+            "请指定新的演示数据库路径；原文件不会被修改。"
+        ) from error
+    if not row or row[0] != _DEMO_MARKER:
+        raise DemoDatabaseError("数据库演示标记不匹配，请指定新的演示数据库路径。")
+
+
+def prepare_demo_database(path):
+    """Mark only a newly created file; existing unmarked files are untouched."""
+    path = Path(path).resolve()
+    with _SEED_LOCK:
+        if path == runtime_config.DEFAULT_BUSINESS_DB.resolve() or path.exists():
+            validate_demo_database(path)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with path.open("xb"):
+                pass
+        except FileExistsError:
+            validate_demo_database(path)
+            return
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute(
+                "CREATE TABLE wuma_demo_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO wuma_demo_metadata VALUES ('purpose', ?)", (_DEMO_MARKER,)
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
 
 def demo_mode_enabled():
     """Return whether the browser-safe public demo entry is enabled."""
-    return _env_flag("WUMA_DEMO_MODE", False)
+    return runtime_config.demo_mode_enabled()
 
 
 def demo_read_only():
-    """Public demos are read-only by default unless explicitly overridden."""
-    return demo_mode_enabled() and _env_flag("WUMA_DEMO_READ_ONLY", True)
+    """Public demos always stay read-only, including legacy false overrides."""
+    return demo_mode_enabled()
 
 
 def _questions():
@@ -218,10 +269,11 @@ def _seed_submission(
     return submission_id
 
 
-def ensure_demo_data():
+def ensure_demo_data(force=False):
     """Seed deterministic synthetic records only for an empty demo database."""
-    if not demo_mode_enabled():
+    if not demo_mode_enabled() and not force:
         return False
+    validate_demo_database(db.current_database_path())
     with _SEED_LOCK:
         if db.list_submissions():
             return False

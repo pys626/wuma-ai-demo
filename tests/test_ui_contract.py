@@ -1,5 +1,6 @@
 import ast
 from pathlib import Path
+import re
 import unittest
 
 import pandas as pd
@@ -13,11 +14,12 @@ class UIContractTests(unittest.TestCase):
         cls.source = app_path.read_text(encoding="utf-8")
 
     def test_version_marker_is_updated(self):
-        self.assertIn("v1.3.16 · 浏览器在线Demo版", self.source)
+        self.assertIn("v1.4 · 完整本地版", self.source)
+        self.assertIn("v1.4 · 赛事只读Demo", self.source)
 
     def test_public_demo_has_safe_browser_entry(self):
         self.assertIn("demo_mode.ensure_demo_data()", self.source)
-        self.assertIn("体验学生端（张同学）", self.source)
+        self.assertTrue("体验学生端" in self.source, "公开入口应提供学生体验按钮")
         self.assertIn("体验教师端", self.source)
         self.assertIn("disabled=demo_mode.demo_read_only()", self.source)
 
@@ -25,7 +27,7 @@ class UIContractTests(unittest.TestCase):
         self.assertIn("STUDENT_PAGES", self.source)
         self.assertIn("TEACHER_PAGES", self.source)
         self.assertIn('os.getenv("TEACHER_PASSWORD", "")', self.source)
-        self.assertIn("hmac.compare_digest", self.source)
+        self.assertIn("account_ui.login(teacher_password())", self.source)
         self.assertIn("不能查看其他学生的报告", self.source)
         self.assertIn("不能打开其他学生的任务", self.source)
         self.assertIn("退出登录", self.source)
@@ -44,6 +46,28 @@ class UIContractTests(unittest.TestCase):
         self.assertEqual(namespace["normalize_editor_scalar"]([25]), 25)
         self.assertTrue(namespace["editor_value_is_blank"]([]))
         self.assertNotIn('item.get("weight") not in {None, ""}', self.source)
+
+    def test_centered_weight_editor_preserves_numeric_rubric_on_save(self):
+        helpers = [
+            node for node in ast.parse(self.source).body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in {"rubric_to_dataframe", "dataframe_to_rubric"}
+        ]
+        namespace = {"pd": pd, "re": re}
+        exec(compile(ast.Module(body=helpers, type_ignores=[]), "app.py", "exec"), namespace)
+        rubric = [{
+            "name": "边界分析", "weight": 100,
+            "source": "实验报告＋答辩", "description": "说明全负数输入的处理。",
+            "must_defend": True,
+        }]
+        edited = namespace["rubric_to_dataframe"](rubric)
+        self.assertEqual(namespace["dataframe_to_rubric"](edited), rubric)
+        edited.loc[0, "权重"] = "40"
+        saved = namespace["dataframe_to_rubric"](edited)[0]
+        self.assertEqual(saved["weight"], 40)
+        self.assertIsInstance(saved["weight"], int)
+        self.assertEqual(saved["source"], rubric[0]["source"])
+        self.assertTrue(saved["must_defend"])
 
     def test_docker_environment_is_explained_without_blaming_student_code(self):
         self.assertIn("不会记为学生代码错误", self.source)
@@ -79,7 +103,7 @@ class UIContractTests(unittest.TestCase):
         self.assertIn("答案错误：实际输出与该公开样例", self.source)
 
     def test_new_hidden_case_editor_starts_blank(self):
-        self.assertIn('"create_assignment_test_cases",\n                [],', self.source)
+        self.assertIn('draft_seed.get("test_cases", [])', self.source)
         self.assertNotIn(
             '"create_assignment_test_cases",\n                db.DEFAULT_TEST_CASES,',
             self.source,
@@ -115,7 +139,7 @@ class UIContractTests(unittest.TestCase):
     def test_code_verification_is_visible_and_traceable(self):
         self.assertIn("import code_verifier as verifier", self.source)
         self.assertIn("启用C++编译与隐藏测试样例验证", self.source)
-        self.assertIn("代码客观验证", self.source)
+        self.assertIn("代码测试结果", self.source)
         self.assertIn("教师查看隐藏样例输入与输出证据", self.source)
         self.assertIn("code_verification=code_verification", self.source)
 
@@ -129,7 +153,7 @@ class UIContractTests(unittest.TestCase):
         self.assertIn("运行错误（RE）", self.source)
         self.assertIn("部分正确", self.source)
         self.assertIn("formal_verification_is_conclusive", self.source)
-        self.assertIn("当前代码没有有效且满足准入规则", self.source)
+        self.assertIn("当前代码没有有效且满足开始答辩条件", self.source)
 
     def test_defense_admission_rules_are_enforced(self):
         module = ast.parse(self.source)
@@ -162,12 +186,12 @@ class UIContractTests(unittest.TestCase):
             },
             partial,
         )
-        self.assertTrue(allowed)
+        self.assertFalse(allowed)
         allowed, _ = namespace["defense_admission_result"](
             {"verification_enabled": True, "defense_admission": "允许带错代码"},
             {"overall_status": "编译失败"},
         )
-        self.assertTrue(allowed)
+        self.assertFalse(allowed)
         allowed, _ = namespace["defense_admission_result"](
             {"verification_enabled": True, "defense_admission": "允许带错代码"},
             {"overall_status": "环境不可用"},
@@ -176,7 +200,7 @@ class UIContractTests(unittest.TestCase):
 
     def test_limited_ai_hints_are_configurable_and_traceable(self):
         self.assertIn("每名学生可使用的AI提示次数", self.source)
-        self.assertIn("答辩准入规则", self.source)
+        self.assertIn("开始AI答辩的条件", self.source)
         self.assertIn("获取AI提示（剩余", self.source)
         self.assertIn("db.save_ai_hint(", self.source)
         self.assertIn("AI提示使用记录", self.source)
@@ -187,7 +211,7 @@ class UIContractTests(unittest.TestCase):
     def test_assignment_reliability_gate_is_visible(self):
         self.assertIn("教师参考答案（仅教师可见）", self.source)
         self.assertIn("reference_solution_preflight", self.source)
-        self.assertIn("至少配置3组隐藏测试", self.source)
+        self.assertIn("至少配置1组隐藏测试", self.source)
         self.assertIn("我已逐项核对，确认这些评分点确实适用于当前实验", self.source)
         self.assertIn("assignment_publish_blockers", self.source)
 
@@ -197,7 +221,7 @@ class UIContractTests(unittest.TestCase):
         self.assertIn("代码客观得分", self.source)
         self.assertIn("测试分组得分", self.source)
         self.assertIn("build_hidden_case_statistics", self.source)
-        self.assertIn("隐藏测试点通过率", self.source)
+        self.assertIn("代码测试点通过率", self.source)
         self.assertIn("编译失败计为对应测试点未通过", self.source)
 
     def test_minimum_character_prompts_are_removed(self):
@@ -237,7 +261,7 @@ class UIContractTests(unittest.TestCase):
         self.assertIn("打开任务中心", self.source)
         self.assertIn('"教师工作台"', self.source)
         self.assertIn('["待办处理", "班级分析"]', self.source)
-        self.assertIn("已定位待办", self.source)
+        self.assertIn("返回待办", self.source)
 
     def test_teacher_workspace_defaults_to_compact_decision_information(self):
         self.assertIn("build_teacher_status_dataframe", self.source)
@@ -246,7 +270,7 @@ class UIContractTests(unittest.TestCase):
         self.assertIn("完整原文默认折叠", self.source)
         self.assertIn("历史评测环境异常", self.source)
         self.assertIn("待办只负责一次定位", self.source)
-        self.assertIn("选择要处理的学生", self.source)
+        self.assertIn("选择要处理的提交", self.source)
         self.assertIn("查看学生代码、解题思路与实验报告", self.source)
         self.assertIn("render_teacher_review_actions", self.source)
         self.assertIn("render_teacher_feedback_actions", self.source)
@@ -257,6 +281,8 @@ class UIContractTests(unittest.TestCase):
             "compact_code_result",
             "shorten_teacher_text",
             "build_teacher_digest",
+            "understanding_text",
+            "confirmed_score_text",
         }
         helpers = [
             node
@@ -320,16 +346,16 @@ class UIContractTests(unittest.TestCase):
 
     def test_teacher_evidence_labels_are_visual_callouts(self):
         self.assertIn("**答辩问题**", self.source)
-        self.assertIn("**为什么问这题**", self.source)
+        self.assertIn("查看问题生成依据（原始记录）", self.source)
         self.assertIn("#### 学生实际回答", self.source)
-        self.assertIn("st.error(finding_text)", self.source)
+        self.assertIn("render_reading_note", self.source)
+        self.assertIn("AI判断：{display_status}", self.source)
 
     def test_competition_ui_separates_web_model_from_learnbuddy(self):
-        self.assertIn("悟码AI网页智能服务：腾讯混元", self.source)
-        self.assertIn("赛事展示前请切换为腾讯混元", self.source)
-        self.assertIn("LearnBuddy通过Skill和MCP读取悟码AI诊断", self.source)
-        self.assertIn("不调用所谓的“LearnBuddy模型API”", self.source)
-        self.assertNotIn("llm.provider_name()", self.source)
+        self.assertIn("网页AI评价服务：{llm.provider_name()} / {llm.model_name()}", self.source)
+        self.assertNotIn("赛事展示前请切换为腾讯混元", self.source)
+        self.assertIn("LearnBuddy通过技能和只读连接器查询悟码AI教学证据", self.source)
+        self.assertIn("教师在网页保存复核结论", self.source)
 
     def test_teacher_accepting_ai_score_is_automatic(self):
         self.assertIn("sync_teacher_score_to_ai", self.source)
@@ -356,9 +382,11 @@ class UIContractTests(unittest.TestCase):
         self.assertIn("labelAngle=0", self.source)
         self.assertNotIn("st.bar_chart(", self.source)
 
-    def test_table_cells_are_centered(self):
-        self.assertIn('classes="wuma-data-table"', self.source)
+    def test_tables_keep_default_alignment_and_readable_evidence_layout(self):
+        self.assertIn('else "wuma-data-table"', self.source)
         self.assertIn("text-align: center !important", self.source)
+        self.assertIn("table.wuma-evidence-table td:first-child", self.source)
+        self.assertIn("text-align: left !important", self.source)
 
 
 if __name__ == "__main__":

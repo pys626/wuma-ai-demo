@@ -46,6 +46,12 @@ class TeacherStatisticsTests(unittest.TestCase):
         records = [self.record(1, score=None), self.record(2, status="答辩中")]
         self.assertEqual(self.helpers["latest_completed_teacher_records"](records), [])
 
+    def test_latest_incomplete_assessment_is_preserved_without_reusing_old_score(self):
+        records = [self.record(1, score=91), {**self.record(2, score=None), "assessment_complete": False}]
+        latest = self.helpers["latest_completed_teacher_records"](records)
+        self.assertEqual([record["id"] for record in latest], [2])
+        self.assertIsNone(latest[0]["overall"])
+
     def test_environment_label_refers_to_saved_submission(self):
         for status in ["环境不可用", "编译环境不兼容"]:
             with self.subTest(status=status):

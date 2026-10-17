@@ -1,83 +1,21 @@
-# 悟码AI在线Demo部署说明
+# 决赛在线Demo发布说明
 
-本说明用于初赛浏览器Demo。默认模式会自动生成合成教学数据，不读取真实学生信息，不调用模型API，也不运行学生代码。评委可直接体验学生端和教师端。
+决赛网址：https://wuma-ai-finals-pys626.streamlit.app/ 。2026-10-11本次更新将最新v1.4的界面与保存流程用于交互演示；AI与判题明确采用固定案例已保存结果回放。冻结基线、范围与限制见[交互Demo说明](INTERACTIVE_DEMO.md)。
 
-## 1. 本机先验收
+| 部署项 | 值 |
+| --- | --- |
+| Repository | pys626/wuma-ai-demo |
+| Branch | finals-20261010 |
+| Main file path | competition_demo.py |
+| Python | 3.12 |
+| 模型Secrets | 不需要 |
 
-### Docker方式（推荐）
+入口为每个访客会话创建独立合成库，忽略业务数据库路径。不上传.env、SQLite库、个人连接配置或访问令牌。公开入口不执行任意代码、不发送模型请求，真实判题与实时AI仍使用完整本地版。原只读入口保留为readonly_demo.py。
 
-在PowerShell中进入项目目录：
+源码仓库同时保留完整本地功能入口`app.py`和在线演示入口`competition_demo.py`。两种运行方式的功能、数据与配置差异见[README对照说明](README.md#两种运行方式)；在线部署应选择`competition_demo.py`。
 
-```powershell
-Set-Location "D:\AI_Coding\wuma_ai_v1_3_16"
-docker compose -f docker-compose.demo.yml up --build
-```
+发布后验收：四角色入口均可进入；管理员有35人分页搜索；教师复核意见可以保存并在同一空间学生报告显示；学生甲可填入材料、载入证据、提交示例首答及补答、生成匹配报告；新建访客空间获得初始合成数据，独立空间之间不共享操作。
 
-浏览器打开 `http://localhost:8501`。停止服务使用：
+刷新与恢复验收：使用含同一随机恢复标识的链接，在标识24小时有效期内刷新或重新连接，再选择身份，应能查看该空间已保存的操作；教师切到对应学生时打开教师选中的报告。主动点击“恢复初始演示数据”、空间到期或临时数据被清理时，才重建初始演示数据，并显示相应提示。恢复链接可访问对应演示空间，应由体验者自行保管；新访客应使用不带他人恢复标识的入口链接。
 
-```powershell
-docker compose -f docker-compose.demo.yml down
-```
-
-如需同时清除合成演示数据库并重新生成：
-
-```powershell
-docker compose -f docker-compose.demo.yml down -v
-```
-
-### Python方式
-
-```powershell
-Set-Location "D:\AI_Coding\wuma_ai_v1_3_16"
-$env:WUMA_DEMO_MODE="true"
-$env:WUMA_DEMO_READ_ONLY="true"
-$env:CODE_EXECUTION_ENABLED="false"
-$env:WUMA_AI_DB_PATH="$PWD\data\wuma_ai_demo.db"
-python -m streamlit run app.py
-```
-
-## 2. 上传源码仓库
-
-仓库必须包含源代码、`Dockerfile`、本说明和项目README，但不得提交 `.env`、真实数据库、密钥或学生数据。
-
-```powershell
-git init
-git add .
-git commit -m "release: wuma ai v1.3.16 status semantics fix"
-git branch -M main
-git remote add origin <你的GitHub或Gitee仓库地址>
-git push -u origin main
-```
-
-上传后检查仓库网页中不存在 `.env`、`data/*.db` 和任何API密钥。
-
-## 3. 部署到浏览器环境
-
-选择支持从Git仓库构建Dockerfile的托管平台，新建Web Service并连接上一步仓库：
-
-| 设置 | 值 |
-|---|---|
-| 构建方式 | 仓库根目录的 `Dockerfile` |
-| 对外端口 | 使用平台提供的 `PORT`；未提供时为8501 |
-| 健康检查 | `/_stcore/health` |
-| `WUMA_DEMO_MODE` | `true` |
-| `WUMA_DEMO_READ_ONLY` | `true` |
-| `CODE_EXECUTION_ENABLED` | `false` |
-| `WUMA_AI_DB_PATH` | `/tmp/wuma_ai_demo.db`（无持久盘时推荐） |
-
-此模式不需要配置 `LLM_API_KEY` 或 `TEACHER_PASSWORD`。容器启动后会自动生成两名虚拟学生、三次实验提交及教师待办。使用 `/tmp` 时，服务重启会恢复干净的演示数据。
-
-部署完成后复制HTTPS地址，并用无痕窗口检查：
-
-1. 链接无需登录托管平台即可访问；
-2. 首页显示“赛事在线Demo”；
-3. “体验学生端”可查看任务、报告和学习趋势；
-4. “体验教师端”可查看教师待办、证据摘要和班级分析；
-5. 页面不出现提交代码、运行程序、保存复核等写入入口；
-6. 刷新和重新打开链接不会报错。
-
-## 4. 完整本地版与公开Demo的边界
-
-公开Demo关闭代码执行、模型调用与业务写入，用于稳定展示产品闭环。完整本地版保持原有提交、判题、AI答辩、教师复核和实验管理功能。
-
-如以后需要把“学生在线提交并运行任意C++代码”开放到公网，必须使用独立沙箱或远程判题节点、身份认证、速率限制和日志审计；不要在公网服务器上启用本机 `g++` 执行模式。
+推送到现有分支即可触发该应用更新，不需要先合并main。交互版云端验收记录以交付目录最新校验记录为准，旧只读版的用户确认不能直接视为新交互版确认。
